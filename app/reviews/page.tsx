@@ -15,7 +15,8 @@ import {
   TrendingUp,
   MessageSquare,
   Search,
-  Check
+  Check,
+  HeartHandshake
 } from 'lucide-react';
 
 const MOCK_REVIEWS: ReviewRequest[] = [
@@ -116,7 +117,7 @@ export default function ReviewsPage() {
     if (!isSupabaseConfigured) return;
 
     const channel = supabase
-      .channel('review-requests-apple-feed')
+      .channel('review-requests-wide-feed')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'review_requests' },
@@ -214,236 +215,241 @@ export default function ReviewsPage() {
     );
   }, [reviews, searchQuery]);
 
-  const formatTime = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffMins = Math.floor(diffMs / (1000 * 60));
-      const diffHours = Math.floor(diffMins / 60);
-
-      let relative = '';
-      if (diffMins < 1) relative = 'Just now';
-      else if (diffMins < 60) relative = `${diffMins}m ago`;
-      else if (diffHours < 24) relative = `${diffHours}h ago`;
-      else relative = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-
-      const timeFormatted = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return { relative, timeFormatted };
-    } catch {
-      return { relative: 'Recent', timeFormatted: '' };
-    }
-  };
-
   return (
-    <main className="max-w-2xl mx-auto px-4 pt-5 pb-24 space-y-5 font-sans text-[#1d1d1f]">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-black/[0.06] pb-4">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 font-sans text-[#18181b] pb-24">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-black/[0.06]">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-[#1d1d1f]">
-            Patient Checkout & Reviews
+          <h1 className="text-2xl font-semibold tracking-tight text-[#18181b]">
+            Patient Checkout & Reputation Hub
           </h1>
-          <p className="text-xs text-[#86868b] mt-0.5">
-            Post-appointment SMS satisfaction surveys & reputation hub
+          <p className="text-xs text-[#71717a] mt-1 font-normal">
+            Automate post-appointment patient satisfaction SMS surveys and track verified clinic reviews
           </p>
         </div>
 
         <button
           onClick={fetchReviews}
-          className="p-1.5 rounded-full bg-white border border-black/[0.06] text-[#86868b] hover:text-[#1d1d1f] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition active:scale-95"
-          title="Refresh"
+          className="p-2 rounded-full bg-white border border-black/[0.06] text-[#71717a] hover:text-[#18181b] shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition active:scale-95 self-start sm:self-auto"
+          title="Refresh List"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-orange-500' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-orange-600' : ''}`} />
         </button>
       </div>
 
-      {/* Top 4 Stats (Apple Widgets) */}
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="bg-white/95 backdrop-blur-xl p-4 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between">
-          <span className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">Sent Today</span>
-          <div className="mt-2">
-            <span className="text-2xl font-bold tracking-tight text-[#1d1d1f]">{stats.sentToday}</span>
-            <p className="text-[11px] text-[#86868b] mt-0.5">invites</p>
+      {/* Top 4 Metrics Tiles */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+          <span className="text-xs font-medium text-[#71717a]">Sent Today</span>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-semibold tracking-tight text-[#18181b]">{stats.sentToday}</span>
+            <span className="text-xs text-[#71717a]">invites</span>
           </div>
         </div>
 
-        <div className="bg-white/95 backdrop-blur-xl p-4 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between">
-          <span className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">All-Time</span>
-          <div className="mt-2">
-            <span className="text-2xl font-bold tracking-tight text-[#1d1d1f]">{stats.totalAllTime}</span>
-            <p className="text-[11px] text-[#86868b] mt-0.5">total dispatched</p>
+        <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+          <span className="text-xs font-medium text-[#71717a]">Total Dispatched</span>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-semibold tracking-tight text-[#18181b]">{stats.totalAllTime}</span>
+            <span className="text-xs text-[#71717a]">lifetime</span>
           </div>
         </div>
 
-        <div className="bg-white/95 backdrop-blur-xl p-4 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between">
-          <span className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">Completed</span>
-          <div className="mt-2">
-            <span className="text-2xl font-bold tracking-tight text-[#ff9500]">{stats.completedCount}</span>
-            <p className="text-[11px] text-[#86868b] mt-0.5">reviews received</p>
+        <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+          <span className="text-xs font-medium text-[#71717a]">Reviews Completed</span>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-semibold tracking-tight text-orange-600">{stats.completedCount}</span>
+            <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/50">
+              {stats.totalAllTime > 0 ? `${Math.round((stats.completedCount / stats.totalAllTime) * 100)}%` : '0%'}
+            </span>
           </div>
         </div>
 
-        <div className="bg-white/95 backdrop-blur-xl p-4 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between">
-          <span className="text-[11px] font-medium text-[#86868b] uppercase tracking-wider">Satisfaction</span>
-          <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-bold tracking-tight text-[#1d1d1f]">{stats.avgRating}</span>
-            <span className="text-xs text-[#ff9500]">★</span>
+        <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+          <span className="text-xs font-medium text-[#71717a]">Clinic Rating</span>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-3xl font-semibold tracking-tight text-[#18181b]">{stats.avgRating}</span>
+            <span className="text-xs text-orange-600 font-medium">★ ★ ★ ★ ★</span>
           </div>
         </div>
       </section>
 
-      {/* Quick Send Form Box (Apple Clean Card) */}
-      <section className="bg-white/95 backdrop-blur-xl p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-3.5">
-        <div>
-          <h2 className="text-sm font-semibold tracking-tight text-[#1d1d1f]">
-            Quick Send Review Invite
-          </h2>
-          <p className="text-xs text-[#86868b]">
-            Trigger an automated feedback SMS right at the checkout counter
-          </p>
-        </div>
-
-        {successMessage && (
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/15 rounded-xl text-xs font-semibold text-emerald-700 flex items-center gap-2">
-            <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
-            <span>{successMessage}</span>
-          </div>
-        )}
-
-        {errorMessage && (
-          <div className="p-3 bg-rose-500/10 border border-rose-500/15 rounded-xl text-xs font-semibold text-rose-700 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSendReviewRequest} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-          <div className="sm:col-span-5 space-y-1">
-            <label className="text-[11px] font-medium text-[#86868b]">
-              Patient Name (Optional)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Eleanor Vance"
-              value={patientName}
-              onChange={(e) => setPatientName(e.target.value)}
-              className="w-full px-3.5 py-2 bg-[#f5f5f7] border border-black/[0.06] focus:bg-white focus:border-orange-500 rounded-xl text-xs text-[#1d1d1f] placeholder-[#86868b] outline-none transition"
-            />
+      {/* 2-Column Split: Form (5 Cols) vs Recent Invites Feed (7 Cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Quick Send Form (5 Cols) */}
+        <section className="lg:col-span-5 bg-white p-6 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] space-y-4">
+          <div className="border-b border-black/[0.05] pb-3">
+            <h2 className="text-sm font-semibold tracking-tight text-[#18181b]">
+              Quick Send Review Invite
+            </h2>
+            <p className="text-xs text-[#71717a] mt-0.5">
+              Trigger an automated feedback SMS right at the checkout counter
+            </p>
           </div>
 
-          <div className="sm:col-span-4 space-y-1">
-            <label className="text-[11px] font-medium text-[#86868b]">
-              Mobile Number *
-            </label>
-            <input
-              type="tel"
-              placeholder="+1 (555) 234-8901"
-              value={patientPhone}
-              onChange={(e) => setPatientPhone(e.target.value)}
-              required
-              className="w-full px-3.5 py-2 bg-[#f5f5f7] border border-black/[0.06] focus:bg-white focus:border-orange-500 rounded-xl text-xs text-[#1d1d1f] placeholder-[#86868b] outline-none transition font-mono"
-            />
-          </div>
+          {successMessage && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200/60 rounded-xl text-xs font-medium text-emerald-800 flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+              <span>{successMessage}</span>
+            </div>
+          )}
 
-          <div className="sm:col-span-3">
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200/60 rounded-xl text-xs font-medium text-rose-800 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSendReviewRequest} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-[#71717a]">
+                Patient Name <span className="text-[#a1a1aa] font-normal">(Optional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Eleanor Vance"
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-[#f4f4f5]/60 border border-black/[0.06] focus:bg-white focus:border-orange-500 rounded-xl text-xs text-[#18181b] placeholder-[#a1a1aa] outline-none transition"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-[#71717a]">
+                Patient Mobile Number <span className="text-orange-600 font-bold">*</span>
+              </label>
+              <input
+                type="tel"
+                placeholder="+1 (555) 234-8901"
+                value={patientPhone}
+                onChange={(e) => setPatientPhone(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 bg-[#f4f4f5]/60 border border-black/[0.06] focus:bg-white focus:border-orange-500 rounded-xl text-xs text-[#18181b] placeholder-[#a1a1aa] outline-none transition font-mono"
+              />
+            </div>
+
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold bg-[#ff9500] hover:bg-[#e68500] text-white shadow-[0_2px_8px_rgba(255,149,0,0.25)] transition active:scale-95 disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-xs font-medium bg-orange-600 hover:bg-orange-700 text-white shadow-[0_2px_8px_rgba(234,88,12,0.22)] transition active:scale-98 disabled:opacity-50"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? 'Sending...' : 'Send Invite'}</span>
+              <span>{isSubmitting ? 'Dispatching SMS...' : 'Send Review Invite'}</span>
             </button>
-          </div>
-        </form>
-      </section>
+          </form>
+        </section>
 
-      {/* Recent Invites List */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold text-[#86868b] uppercase tracking-wider pl-1">
-            Recent Review Invites ({filteredReviews.length})
-          </h2>
+        {/* Recent Invites List (7 Cols) */}
+        <section className="lg:col-span-7 space-y-4">
+          <div className="flex items-center justify-between pb-1">
+            <h2 className="text-xs font-semibold text-[#71717a] uppercase tracking-wider">
+              Recent Dispatches ({filteredReviews.length})
+            </h2>
 
-          <div className="relative w-44">
-            <Search className="w-3.5 h-3.5 text-[#86868b] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Filter..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1 bg-white border border-black/[0.06] focus:border-orange-500 rounded-full text-xs text-[#1d1d1f] placeholder-[#86868b] outline-none transition"
-            />
-          </div>
-        </div>
-
-        {filteredReviews.map((invite) => {
-          const { relative, timeFormatted } = formatTime(invite.created_at);
-
-          return (
-            <div
-              key={invite.id}
-              className="p-4 bg-white/95 backdrop-blur-xl rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:border-black/[0.12] transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center shrink-0">
-                  <UserCheck className="w-4 h-4" />
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm text-[#1d1d1f]">
-                      {invite.patient_name || invite.patient_phone}
-                    </span>
-
-                    {invite.patient_name && (
-                      <span className="text-[11px] font-mono text-[#86868b]">
-                        {invite.patient_phone}
-                      </span>
-                    )}
-
-                    <span
-                      className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-tight ${
-                        invite.status === 'completed'
-                          ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/15'
-                          : invite.status === 'delivered'
-                          ? 'bg-orange-500/10 text-orange-600 border border-orange-500/15'
-                          : 'bg-black/[0.05] text-[#86868b]'
-                      }`}
-                    >
-                      {invite.status === 'completed' ? 'Review Received' : invite.status}
-                    </span>
-
-                    {invite.rating && (
-                      <span className="text-xs font-semibold text-[#ff9500] flex items-center gap-0.5">
-                        ★ {invite.rating}.0
-                      </span>
-                    )}
-                  </div>
-
-                  {invite.feedback && (
-                    <p className="text-xs text-[#86868b] mt-1 italic">
-                      "{invite.feedback}"
-                    </p>
-                  )}
-
-                  <div className="flex items-center gap-1.5 text-[11px] text-[#86868b] mt-1">
-                    <Clock className="w-3 h-3 text-[#86868b]" />
-                    <span>{relative} ({timeFormatted})</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="self-end sm:self-center">
-                <span className="text-[11px] font-medium text-emerald-700 bg-emerald-500/10 px-2.5 py-1 rounded-full flex items-center gap-1">
-                  <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
-                  SMS Sent
-                </span>
-              </div>
+            <div className="relative w-56">
+              <Search className="w-3.5 h-3.5 text-[#71717a] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Filter patients..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1 bg-white border border-black/[0.06] focus:border-orange-500 rounded-full text-xs text-[#18181b] placeholder-[#a1a1aa] outline-none transition"
+              />
             </div>
-          );
-        })}
-      </section>
+          </div>
+
+          <div className="space-y-3">
+            {filteredReviews.map((invite) => {
+              const { relative, timeFormatted } = formatTime(invite.created_at);
+
+              return (
+                <div
+                  key={invite.id}
+                  className="p-5 bg-white rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] hover:border-black/[0.12] transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 border border-orange-100">
+                      <UserCheck className="w-4.5 h-4.5" />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-[#18181b]">
+                          {invite.patient_name || invite.patient_phone}
+                        </span>
+
+                        {invite.patient_name && (
+                          <span className="text-xs font-mono text-[#71717a]">
+                            {invite.patient_phone}
+                          </span>
+                        )}
+
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            invite.status === 'completed'
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
+                              : invite.status === 'delivered'
+                              ? 'bg-blue-50 text-blue-800 border border-blue-200/60'
+                              : 'bg-[#f4f4f5] text-[#71717a]'
+                          }`}
+                        >
+                          {invite.status === 'completed' ? 'Review Received' : invite.status}
+                        </span>
+
+                        {invite.rating && (
+                          <span className="text-xs font-medium text-orange-600 flex items-center gap-0.5">
+                            ★ {invite.rating}.0
+                          </span>
+                        )}
+                      </div>
+
+                      {invite.feedback && (
+                        <p className="text-xs text-[#71717a] mt-1 italic">
+                          "{invite.feedback}"
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-1.5 text-xs text-[#a1a1aa] mt-1">
+                        <Clock className="w-3 h-3" />
+                        <span>{relative} ({timeFormatted})</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="self-end sm:self-center">
+                    <span className="text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/50 flex items-center gap-1">
+                      <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
+                      SMS Sent
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
     </main>
   );
+}
+
+function formatTime(isoString: string) {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMins / 60);
+
+    let relative = '';
+    if (diffMins < 1) relative = 'Just now';
+    else if (diffMins < 60) relative = `${diffMins}m ago`;
+    else if (diffHours < 24) relative = `${diffHours}h ago`;
+    else relative = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+    const timeFormatted = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return { relative, timeFormatted };
+  } catch {
+    return { relative: 'Recent', timeFormatted: '' };
+  }
 }
