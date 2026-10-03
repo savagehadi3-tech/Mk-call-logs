@@ -3,8 +3,8 @@ import './globals.css';
 import Navbar from '@/components/Navbar';
 
 export const metadata: Metadata = {
-  title: 'Clinic Hub | Inbound Triage & Reputation System',
-  description: 'Clinical telephone triage console, real-time intake telemetry, and patient checkout reputation tracking.',
+  title: 'Clinical Care Hub | EHR Call Triage & Reputation System',
+  description: 'High-fidelity healthcare application for doctors. Electronic health record call triage, clinical telemetry, and patient reputation management.',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -17,7 +17,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#fafaf9',
+  themeColor: '#095d7e',
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-[#fafaf9] text-[#18181b] min-h-screen antialiased flex flex-col font-sans selection:bg-orange-500/20 selection:text-orange-950">
+      <body className="bg-[#f8f9fa] text-[#1e293b] min-h-screen antialiased flex flex-col font-sans selection:bg-[#095d7e]/20 selection:text-[#095d7e]">
         <Navbar />
         <div className="flex-1">{children}</div>
       </body>

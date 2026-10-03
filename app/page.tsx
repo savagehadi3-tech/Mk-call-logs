@@ -339,31 +339,31 @@ export default function DoctorFeed() {
   }, [calls, filter, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#fafaf9] text-[#18181b] font-sans pb-24">
+    <div className="min-h-screen bg-[#f8f9fa] text-[#1e293b] font-sans pb-24">
       {/* Spacious 7XL Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Top Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-black/[0.06]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e7ebef]">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#18181b]">
-              Inbound Call Triage Console
+            <h1 className="text-2xl font-semibold tracking-tight text-[#1e293b]">
+              Physician Call Triage & EHR Intake
             </h1>
-            <p className="text-xs text-[#71717a] mt-1 font-normal">
-              Real-time patient telephony stream, clinical intake summaries & callback management
+            <p className="text-xs text-[#64748b] mt-1 font-normal">
+              Real-time patient telecommunications, AI triage summaries & electronic health record sync
             </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-black/[0.06] shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#e7ebef] shadow-soft">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="text-xs font-medium text-[#71717a]">
-                {isDemoMode ? 'Live Interactive Preview' : 'Supabase Live Connected'}
+              <span className="text-xs font-medium text-[#64748b]">
+                {isDemoMode ? 'Interactive Clinical Preview' : 'Postgres Realtime Connected'}
               </span>
             </div>
 
             <button
               onClick={() => setShowSimulateModal(true)}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-full bg-orange-600 hover:bg-orange-700 text-white shadow-[0_2px_8px_rgba(234,88,12,0.22)] transition active:scale-98"
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-full bg-[#095d7e] hover:bg-[#074862] text-white shadow-[0_2px_8px_rgba(9,93,126,0.25)] transition active:scale-98"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span>Simulate Call</span>
@@ -371,68 +371,88 @@ export default function DoctorFeed() {
 
             <button
               onClick={fetchCalls}
-              className="p-2 rounded-full bg-white border border-black/[0.06] text-[#71717a] hover:text-[#18181b] shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition active:scale-95"
+              className="p-2 rounded-full bg-white border border-[#e7ebef] text-[#64748b] hover:text-[#095d7e] shadow-soft transition active:scale-95"
               title="Refresh Stream"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-orange-600' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#095d7e]' : ''}`} />
             </button>
           </div>
         </div>
 
-        {/* 4 Wide Metric Summary Tiles */}
+        {/* 4 Clinical Vitals & Intake Metric Cards */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
-            <span className="text-xs font-medium text-[#71717a]">
-              Today's Inbound
-            </span>
+          <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#64748b]">
+                Today's Inbound
+              </span>
+              <span className="w-2 h-2 rounded-full bg-[#095d7e]/40" />
+            </div>
             <div className="mt-3 flex items-baseline justify-between">
-              <span className="text-3xl font-semibold tracking-tight text-[#18181b]">
+              <span className="text-3xl font-semibold tracking-tight text-[#1e293b]">
                 {stats.total}
               </span>
-              <span className="text-xs text-[#71717a]">
+              <span className="text-xs text-[#64748b]">
                 {stats.missed} missed
               </span>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
-            <span className="text-xs font-medium text-[#71717a]">
-              Answer Rate
-            </span>
+          <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#64748b]">
+                Answer Rate
+              </span>
+              <span className="text-[11px] font-semibold text-[#095d7e] bg-[#eaf4f8] px-2 py-0.5 rounded-full border border-[#c3dfeb]">
+                Optimal
+              </span>
+            </div>
             <div className="mt-3 flex items-baseline justify-between">
-              <span className="text-3xl font-semibold tracking-tight text-orange-600">
+              <span className="text-3xl font-semibold tracking-tight text-[#095d7e]">
                 {stats.answerRate}%
               </span>
-              <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/50">
-                Healthy
+              <span className="text-xs text-[#64748b]">
+                {stats.answered} of {stats.total}
               </span>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
-            <span className="text-xs font-medium text-[#71717a]">
-              Avg Handle Time
-            </span>
+          <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#64748b]">
+                Avg Handle Time
+              </span>
+              <Clock className="w-3.5 h-3.5 text-[#64748b]" />
+            </div>
             <div className="mt-3 flex items-baseline justify-between">
-              <span className="text-2xl font-semibold tracking-tight text-[#18181b]">
+              <span className="text-2xl font-semibold tracking-tight text-[#1e293b]">
                 {stats.avgDuration}
               </span>
-              <span className="text-xs text-[#71717a]">
-                answered
+              <span className="text-xs text-[#64748b]">
+                per answered call
               </span>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
-            <span className="text-xs font-medium text-[#71717a]">
-              Callbacks Needed
-            </span>
+          <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#64748b]">
+                Pending Callbacks
+              </span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                stats.pendingCount > 0 
+                  ? 'text-amber-700 bg-amber-50 border-amber-200/60' 
+                  : 'text-emerald-700 bg-emerald-50 border-emerald-200/60'
+              }`}>
+                {stats.pendingCount > 0 ? 'Action Req.' : 'All Clear'}
+              </span>
+            </div>
             <div className="mt-3 flex items-baseline justify-between">
-              <span className="text-3xl font-semibold tracking-tight text-[#18181b]">
+              <span className="text-3xl font-semibold tracking-tight text-[#1e293b]">
                 {stats.pendingCount}
               </span>
-              <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/50">
-                Action Req.
+              <span className="text-xs text-[#64748b]">
+                requiring follow-up
               </span>
             </div>
           </div>
@@ -444,13 +464,13 @@ export default function DoctorFeed() {
           <section className="lg:col-span-8 space-y-4">
             {/* Filter Pills & Search */}
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between pb-1">
-              <div className="flex items-center bg-black/[0.04] p-1 rounded-full text-xs font-medium border border-black/[0.03]">
+              <div className="flex items-center bg-[#eef2f5] p-1 rounded-full text-xs font-medium border border-[#e2e8f0]">
                 <button
                   onClick={() => setFilter('all')}
                   className={`px-3.5 py-1.5 rounded-full transition-all duration-200 ${
                     filter === 'all'
-                      ? 'bg-white text-[#18181b] shadow-[0_1px_4px_rgba(0,0,0,0.06)] font-semibold'
-                      : 'text-[#71717a] hover:text-[#18181b]'
+                      ? 'bg-white text-[#095d7e] shadow-soft font-semibold'
+                      : 'text-[#64748b] hover:text-[#1e293b]'
                   }`}
                 >
                   All Calls ({calls.length})
@@ -459,8 +479,8 @@ export default function DoctorFeed() {
                   onClick={() => setFilter('pending')}
                   className={`px-3.5 py-1.5 rounded-full transition-all duration-200 ${
                     filter === 'pending'
-                      ? 'bg-white text-orange-600 shadow-[0_1px_4px_rgba(0,0,0,0.06)] font-semibold'
-                      : 'text-[#71717a] hover:text-[#18181b]'
+                      ? 'bg-white text-[#095d7e] shadow-soft font-semibold'
+                      : 'text-[#64748b] hover:text-[#1e293b]'
                   }`}
                 >
                   Pending Callback ({stats.pendingCount})
@@ -469,8 +489,8 @@ export default function DoctorFeed() {
                   onClick={() => setFilter('voicemail')}
                   className={`px-3.5 py-1.5 rounded-full transition-all duration-200 ${
                     filter === 'voicemail'
-                      ? 'bg-white text-rose-600 shadow-[0_1px_4px_rgba(0,0,0,0.06)] font-semibold'
-                      : 'text-[#71717a] hover:text-[#18181b]'
+                      ? 'bg-white text-rose-700 shadow-soft font-semibold'
+                      : 'text-[#64748b] hover:text-[#1e293b]'
                   }`}
                 >
                   Voicemails ({calls.filter((c) => c.call_type === 'voicemail').length})
@@ -479,8 +499,8 @@ export default function DoctorFeed() {
                   onClick={() => setFilter('resolved')}
                   className={`px-3.5 py-1.5 rounded-full transition-all duration-200 ${
                     filter === 'resolved'
-                      ? 'bg-white text-emerald-700 shadow-[0_1px_4px_rgba(0,0,0,0.06)] font-semibold'
-                      : 'text-[#71717a] hover:text-[#18181b]'
+                      ? 'bg-white text-emerald-700 shadow-soft font-semibold'
+                      : 'text-[#64748b] hover:text-[#1e293b]'
                   }`}
                 >
                   Resolved
@@ -488,13 +508,13 @@ export default function DoctorFeed() {
               </div>
 
               <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-[#71717a] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-3.5 h-3.5 text-[#64748b] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Filter by phone or patient..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-black/[0.06] focus:border-orange-500 rounded-full text-xs text-[#18181b] placeholder-[#71717a] outline-none shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition"
+                  className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-[#e7ebef] focus:border-[#095d7e] focus:ring-2 focus:ring-[#095d7e]/15 rounded-full text-xs text-[#1e293b] placeholder-[#94a3b8] outline-none shadow-soft transition"
                 />
               </div>
             </div>
@@ -507,17 +527,17 @@ export default function DoctorFeed() {
                 return (
                   <div
                     key={call.id}
-                    className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] hover:border-black/[0.12] transition-all duration-200"
+                    className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:border-[#c3dfeb] hover:shadow-card-hover transition-all duration-200"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
                       <div className="flex items-center gap-3.5">
                         <div
                           className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                             call.call_type === 'voicemail'
-                              ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
                               : call.call_type === 'missed'
-                              ? 'bg-amber-50 text-amber-600 border border-amber-100'
-                              : 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                              : 'bg-[#eaf4f8] text-[#095d7e] border border-[#c3dfeb]'
                           }`}
                         >
                           {call.call_type === 'voicemail' && <Voicemail className="w-4.5 h-4.5" />}
@@ -527,19 +547,19 @@ export default function DoctorFeed() {
 
                         <div>
                           <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="font-semibold text-sm text-[#18181b] tracking-tight">
+                            <span className="font-semibold text-sm text-[#1e293b] tracking-tight">
                               {call.patient_name || call.caller_number}
                             </span>
                             {call.patient_name && (
-                              <span className="text-xs font-mono text-[#71717a]">
+                              <span className="text-xs font-mono text-[#64748b]">
                                 {call.caller_number}
                               </span>
                             )}
                           </div>
 
-                          <div className="flex items-center gap-2 text-xs text-[#71717a] mt-0.5">
+                          <div className="flex items-center gap-2 text-xs text-[#64748b] mt-0.5">
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-[#a1a1aa]" />
+                              <Clock className="w-3 h-3 text-[#94a3b8]" />
                               {new Date(call.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                             {call.duration ? (
@@ -549,15 +569,15 @@ export default function DoctorFeed() {
                         </div>
                       </div>
 
-                      {/* Status Badges */}
+                      {/* Status Badges & Quick Action */}
                       <div className="flex items-center gap-2 self-start sm:self-auto">
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium capitalize ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold capitalize ${
                             call.call_type === 'voicemail'
                               ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
                               : call.call_type === 'missed'
                               ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                              : 'bg-[#eaf4f8] text-[#095d7e] border border-[#c3dfeb]'
                           }`}
                         >
                           <span
@@ -566,7 +586,7 @@ export default function DoctorFeed() {
                                 ? 'bg-rose-500'
                                 : call.call_type === 'missed'
                                 ? 'bg-amber-500'
-                                : 'bg-emerald-500'
+                                : 'bg-[#095d7e]'
                             }`}
                           />
                           {call.call_type}
@@ -576,7 +596,7 @@ export default function DoctorFeed() {
                           <button
                             onClick={() => toggleStatus(call.id, call.status)}
                             disabled={updatingId === call.id}
-                            className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[#f4f4f5] hover:bg-[#e4e4e7] text-[#27272a] border border-[#e4e4e7] transition active:scale-98"
+                            className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] border border-[#cbd5e1] transition active:scale-98"
                           >
                             <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
                             <span>Resolved</span>
@@ -585,7 +605,7 @@ export default function DoctorFeed() {
                           <button
                             onClick={() => toggleStatus(call.id, call.status)}
                             disabled={updatingId === call.id}
-                            className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-orange-600 hover:bg-orange-700 text-white shadow-[0_1px_4px_rgba(234,88,12,0.2)] transition active:scale-98"
+                            className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-[#095d7e] hover:bg-[#074862] text-white shadow-[0_1px_4px_rgba(9,93,126,0.2)] transition active:scale-98"
                           >
                             <span>Mark Resolved</span>
                           </button>
@@ -593,14 +613,14 @@ export default function DoctorFeed() {
                       </div>
                     </div>
 
-                    {/* AI Clinical Summary (Refined warm container) */}
+                    {/* AI Clinical Summary (Deep Blue-Teal Wash Container) */}
                     {call.summary && (
-                      <div className="bg-[#fffbf6] border border-orange-200/50 rounded-xl p-3.5 mt-2.5 text-xs text-[#27272a]">
-                        <div className="flex items-center gap-1.5 mb-1 text-orange-700 font-medium">
-                          <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+                      <div className="bg-[#f0f7fa] border border-[#c3dfeb] rounded-xl p-3.5 mt-2.5 text-xs text-[#1e293b]">
+                        <div className="flex items-center gap-1.5 mb-1 text-[#095d7e] font-semibold">
+                          <Sparkles className="w-3.5 h-3.5 text-[#095d7e]" />
                           <span className="text-[11px] uppercase tracking-wider">AI Clinical Summary</span>
                         </div>
-                        <p className="leading-relaxed font-normal">
+                        <p className="leading-relaxed font-normal text-[#1e293b]">
                           {call.summary}
                         </p>
                       </div>
@@ -608,9 +628,9 @@ export default function DoctorFeed() {
 
                     {/* Audio Player */}
                     {call.recording_url && (
-                      <div className="mt-3 bg-black/[0.02] p-2.5 rounded-xl border border-black/[0.04]">
-                        <div className="flex items-center gap-2 mb-1.5 text-[11px] font-medium text-[#71717a]">
-                          <Volume2 className="w-3.5 h-3.5 text-orange-600" />
+                      <div className="mt-3 bg-[#f8f9fa] p-2.5 rounded-xl border border-[#e7ebef]">
+                        <div className="flex items-center gap-2 mb-1.5 text-[11px] font-semibold text-[#095d7e]">
+                          <Volume2 className="w-3.5 h-3.5 text-[#095d7e]" />
                           <span>Voicemail Playback</span>
                         </div>
                         <audio controls className="w-full h-8 outline-none">
@@ -625,8 +645,8 @@ export default function DoctorFeed() {
               })}
 
               {filteredCalls.length === 0 && (
-                <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-black/[0.08]">
-                  <p className="text-sm font-medium text-[#71717a]">No calls matching this filter.</p>
+                <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-[#e7ebef]">
+                  <p className="text-sm font-medium text-[#64748b]">No calls matching this filter.</p>
                 </div>
               )}
             </div>
@@ -635,15 +655,15 @@ export default function DoctorFeed() {
           {/* Right Sidebar Operations Column (4 Cols) */}
           <aside className="lg:col-span-4 space-y-5">
             {/* Hourly Distribution Sparkline Widget */}
-            <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] space-y-3">
-              <div className="flex items-center justify-between border-b border-black/[0.05] pb-2.5">
+            <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft space-y-3">
+              <div className="flex items-center justify-between border-b border-[#f1f5f9] pb-2.5">
                 <div className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-orange-600" />
-                  <span className="text-xs font-semibold text-[#18181b]">
+                  <BarChart3 className="w-4 h-4 text-[#095d7e]" />
+                  <span className="text-xs font-semibold text-[#1e293b]">
                     Hourly Intake Traffic
                   </span>
                 </div>
-                <span className="text-[11px] text-[#71717a]">
+                <span className="text-[11px] text-[#64748b]">
                   Peak: {stats.peakHourFormatted}
                 </span>
               </div>
@@ -651,20 +671,20 @@ export default function DoctorFeed() {
               <div className="grid grid-cols-10 gap-1.5 pt-2">
                 {stats.hourlyDistribution.map((item) => (
                   <div key={item.hour} className="flex flex-col items-center gap-1 group">
-                    <div className="w-full bg-[#f4f4f5] rounded-md h-16 flex flex-col justify-end p-0.5 relative overflow-hidden">
+                    <div className="w-full bg-[#f1f5f9] rounded-md h-16 flex flex-col justify-end p-0.5 relative overflow-hidden">
                       <div
                         className={`w-full rounded transition-all duration-300 ${
-                          item.count > 0 ? 'bg-orange-600 group-hover:bg-orange-700' : 'bg-transparent'
+                          item.count > 0 ? 'bg-[#095d7e] group-hover:bg-[#074862]' : 'bg-transparent'
                         }`}
                         style={{ height: `${Math.max(item.percentage, item.count > 0 ? 18 : 0)}%` }}
                       />
                       {item.count > 0 && (
-                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#18181b] group-hover:text-white pointer-events-none">
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#1e293b] group-hover:text-white pointer-events-none">
                           {item.count}
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] font-medium text-[#71717a]">
+                    <span className="text-[10px] font-medium text-[#64748b]">
                       {item.label}
                     </span>
                   </div>
@@ -673,39 +693,39 @@ export default function DoctorFeed() {
             </div>
 
             {/* Clinic Operations & EMR Sync Status */}
-            <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] space-y-3">
-              <h3 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
+            <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft space-y-3">
+              <h3 className="text-xs font-semibold text-[#1e293b] uppercase tracking-wider">
                 System Telemetry
               </h3>
 
-              <div className="space-y-2.5 text-xs text-[#71717a]">
-                <div className="flex justify-between items-center py-1 border-b border-black/[0.03]">
+              <div className="space-y-2.5 text-xs text-[#64748b]">
+                <div className="flex justify-between items-center py-1 border-b border-[#f1f5f9]">
                   <span>Telephony Provider</span>
-                  <span className="font-medium text-[#18181b]">OpenPhone / Quo VoIP</span>
+                  <span className="font-semibold text-[#1e293b]">OpenPhone / Quo VoIP</span>
                 </div>
-                <div className="flex justify-between items-center py-1 border-b border-black/[0.03]">
+                <div className="flex justify-between items-center py-1 border-b border-[#f1f5f9]">
                   <span>Webhook Endpoint</span>
-                  <code className="font-mono text-[11px] bg-[#f4f4f5] px-1.5 py-0.5 rounded text-[#27272a]">/api/webhook</code>
+                  <code className="font-mono text-[11px] bg-[#eaf4f8] text-[#095d7e] px-1.5 py-0.5 rounded font-medium">/api/webhook</code>
                 </div>
-                <div className="flex justify-between items-center py-1 border-b border-black/[0.03]">
+                <div className="flex justify-between items-center py-1 border-b border-[#f1f5f9]">
                   <span>Realtime Engine</span>
                   <span className="text-emerald-700 font-medium">Postgres Channel Active</span>
                 </div>
                 <div className="flex justify-between items-center py-1">
                   <span>AI Triage Processing</span>
-                  <span className="font-medium text-[#18181b]">Automated EMR Summaries</span>
+                  <span className="font-semibold text-[#095d7e]">Automated EHR Summaries</span>
                 </div>
               </div>
             </div>
 
             {/* Quick Test Inbound Generator */}
-            <div className="bg-[#fffbf6] border border-orange-200/60 p-5 rounded-2xl shadow-xs space-y-3">
+            <div className="bg-[#f0f7fa] border border-[#c3dfeb] p-5 rounded-2xl shadow-soft space-y-3">
               <div>
-                <h4 className="text-xs font-semibold text-[#18181b]">
+                <h4 className="text-xs font-semibold text-[#1e293b]">
                   Test Inbound Simulator
                 </h4>
-                <p className="text-[11px] text-[#71717a] mt-0.5">
-                  Simulate live triage events to verify realtime dashboard response
+                <p className="text-[11px] text-[#64748b] mt-0.5">
+                  Simulate live triage events to verify realtime EHR dashboard response
                 </p>
               </div>
 
@@ -726,10 +746,10 @@ export default function DoctorFeed() {
                 </button>
                 <button
                   onClick={() => handleSimulateCall('answered')}
-                  className="w-full text-left p-2.5 rounded-xl border border-emerald-200/70 bg-white hover:bg-emerald-50/50 text-xs font-medium text-emerald-800 transition flex items-center justify-between"
+                  className="w-full text-left p-2.5 rounded-xl border border-[#c3dfeb] bg-white hover:bg-[#eaf4f8]/50 text-xs font-medium text-[#095d7e] transition flex items-center justify-between"
                 >
                   <span>Answered Routine Refill</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-emerald-400" />
+                  <ChevronRight className="w-3.5 h-3.5 text-[#095d7e]" />
                 </button>
               </div>
             </div>
@@ -739,18 +759,18 @@ export default function DoctorFeed() {
 
       {/* Simulator Modal */}
       {showSimulateModal && (
-        <div className="fixed inset-0 z-50 bg-black/25 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-black/[0.08] rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-[0_12px_40px_rgba(0,0,0,0.1)]">
-            <div className="flex justify-between items-center border-b border-black/[0.05] pb-3">
-              <h3 className="text-sm font-semibold text-[#18181b]">Simulate Inbound Call</h3>
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-[#e7ebef] rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-[0_12px_40px_rgba(9,93,126,0.12)]">
+            <div className="flex justify-between items-center border-b border-[#f1f5f9] pb-3">
+              <h3 className="text-sm font-semibold text-[#1e293b]">Simulate Inbound Call</h3>
               <button
                 onClick={() => setShowSimulateModal(false)}
-                className="w-7 h-7 rounded-full bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center text-[#71717a] text-xs font-bold transition"
+                className="w-7 h-7 rounded-full bg-[#f1f5f9] hover:bg-[#e2e8f0] flex items-center justify-center text-[#64748b] text-xs font-bold transition"
               >
                 ✕
               </button>
             </div>
-            <p className="text-xs text-[#71717a]">
+            <p className="text-xs text-[#64748b]">
               Trigger an incoming telephony webhook event to test live triage and audio:
             </p>
             <div className="space-y-2 pt-1">
@@ -768,7 +788,7 @@ export default function DoctorFeed() {
               </button>
               <button
                 onClick={() => handleSimulateCall('answered')}
-                className="w-full text-left p-3 rounded-xl border border-emerald-200/60 bg-emerald-50/50 hover:bg-emerald-50 text-xs font-semibold text-emerald-800 transition"
+                className="w-full text-left p-3 rounded-xl border border-[#c3dfeb] bg-[#eaf4f8]/50 hover:bg-[#eaf4f8] text-xs font-semibold text-[#095d7e] transition"
               >
                 Answered Routine Call
               </button>

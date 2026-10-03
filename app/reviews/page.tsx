@@ -218,58 +218,58 @@ export default function ReviewsPage() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 font-sans text-[#18181b] pb-24">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-black/[0.06]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e7ebef]">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[#18181b]">
-            Patient Checkout & Reputation Hub
+          <h1 className="text-2xl font-semibold tracking-tight text-[#1e293b]">
+            Patient Care Feedback & Reputation Hub
           </h1>
-          <p className="text-xs text-[#71717a] mt-1 font-normal">
-            Automate post-appointment patient satisfaction SMS surveys and track verified clinic reviews
+          <p className="text-xs text-[#64748b] mt-1 font-normal">
+            Automate post-appointment patient satisfaction SMS surveys and track verified clinic reputation
           </p>
         </div>
 
         <button
           onClick={fetchReviews}
-          className="p-2 rounded-full bg-white border border-black/[0.06] text-[#71717a] hover:text-[#18181b] shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition active:scale-95 self-start sm:self-auto"
+          className="p-2 rounded-full bg-white border border-[#e7ebef] text-[#64748b] hover:text-[#095d7e] shadow-soft transition active:scale-95 self-start sm:self-auto"
           title="Refresh List"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-orange-600' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#095d7e]' : ''}`} />
         </button>
       </div>
 
       {/* Top 4 Metrics Tiles */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#71717a]">Sent Today</span>
+        <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
+          <span className="text-xs font-semibold text-[#64748b]">Sent Today</span>
           <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-semibold tracking-tight text-[#18181b]">{stats.sentToday}</span>
-            <span className="text-xs text-[#71717a]">invites</span>
+            <span className="text-3xl font-semibold tracking-tight text-[#1e293b]">{stats.sentToday}</span>
+            <span className="text-xs text-[#64748b]">invites</span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#71717a]">Total Dispatched</span>
+        <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
+          <span className="text-xs font-semibold text-[#64748b]">Total Dispatched</span>
           <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-semibold tracking-tight text-[#18181b]">{stats.totalAllTime}</span>
-            <span className="text-xs text-[#71717a]">lifetime</span>
+            <span className="text-3xl font-semibold tracking-tight text-[#1e293b]">{stats.totalAllTime}</span>
+            <span className="text-xs text-[#64748b]">lifetime</span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#71717a]">Reviews Completed</span>
+        <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
+          <span className="text-xs font-semibold text-[#64748b]">Reviews Completed</span>
           <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-semibold tracking-tight text-orange-600">{stats.completedCount}</span>
-            <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/50">
+            <span className="text-3xl font-semibold tracking-tight text-[#095d7e]">{stats.completedCount}</span>
+            <span className="text-[11px] font-semibold text-[#095d7e] bg-[#eaf4f8] px-2 py-0.5 rounded-full border border-[#c3dfeb]">
               {stats.totalAllTime > 0 ? `${Math.round((stats.completedCount / stats.totalAllTime) * 100)}%` : '0%'}
             </span>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between">
-          <span className="text-xs font-medium text-[#71717a]">Clinic Rating</span>
+        <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
+          <span className="text-xs font-semibold text-[#64748b]">Clinic Rating</span>
           <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-3xl font-semibold tracking-tight text-[#18181b]">{stats.avgRating}</span>
-            <span className="text-xs text-orange-600 font-medium">★ ★ ★ ★ ★</span>
+            <span className="text-3xl font-semibold tracking-tight text-[#1e293b]">{stats.avgRating}</span>
+            <span className="text-xs text-[#095d7e] font-semibold tracking-widest">★ ★ ★ ★ ★</span>
           </div>
         </div>
       </section>
@@ -277,13 +277,13 @@ export default function ReviewsPage() {
       {/* 2-Column Split: Form (5 Cols) vs Recent Invites Feed (7 Cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Quick Send Form (5 Cols) */}
-        <section className="lg:col-span-5 bg-white p-6 rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] space-y-4">
-          <div className="border-b border-black/[0.05] pb-3">
-            <h2 className="text-sm font-semibold tracking-tight text-[#18181b]">
+        <section className="lg:col-span-5 bg-white p-6 rounded-2xl border border-[#e7ebef] shadow-soft space-y-4">
+          <div className="border-b border-[#f1f5f9] pb-3">
+            <h2 className="text-sm font-semibold tracking-tight text-[#1e293b]">
               Quick Send Review Invite
             </h2>
-            <p className="text-xs text-[#71717a] mt-0.5">
-              Trigger an automated feedback SMS right at the checkout counter
+            <p className="text-xs text-[#64748b] mt-0.5">
+              Trigger an automated feedback SMS right at patient checkout or discharge
             </p>
           </div>
 
@@ -303,21 +303,21 @@ export default function ReviewsPage() {
 
           <form onSubmit={handleSendReviewRequest} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-[#71717a]">
-                Patient Name <span className="text-[#a1a1aa] font-normal">(Optional)</span>
+              <label className="text-xs font-medium text-[#64748b]">
+                Patient Name <span className="text-[#94a3b8] font-normal">(Optional)</span>
               </label>
               <input
                 type="text"
                 placeholder="e.g. Eleanor Vance"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-[#f4f4f5]/60 border border-black/[0.06] focus:bg-white focus:border-orange-500 rounded-xl text-xs text-[#18181b] placeholder-[#a1a1aa] outline-none transition"
+                className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e7ebef] focus:bg-white focus:border-[#095d7e] focus:ring-2 focus:ring-[#095d7e]/15 rounded-xl text-xs text-[#1e293b] placeholder-[#94a3b8] outline-none transition"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-[#71717a]">
-                Patient Mobile Number <span className="text-orange-600 font-bold">*</span>
+              <label className="text-xs font-medium text-[#64748b]">
+                Patient Mobile Number <span className="text-[#095d7e] font-bold">*</span>
               </label>
               <input
                 type="tel"
@@ -325,14 +325,14 @@ export default function ReviewsPage() {
                 value={patientPhone}
                 onChange={(e) => setPatientPhone(e.target.value)}
                 required
-                className="w-full px-3.5 py-2.5 bg-[#f4f4f5]/60 border border-black/[0.06] focus:bg-white focus:border-orange-500 rounded-xl text-xs text-[#18181b] placeholder-[#a1a1aa] outline-none transition font-mono"
+                className="w-full px-3.5 py-2.5 bg-[#f8f9fa] border border-[#e7ebef] focus:bg-white focus:border-[#095d7e] focus:ring-2 focus:ring-[#095d7e]/15 rounded-xl text-xs text-[#1e293b] placeholder-[#94a3b8] outline-none transition font-mono"
               />
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-xs font-medium bg-orange-600 hover:bg-orange-700 text-white shadow-[0_2px_8px_rgba(234,88,12,0.22)] transition active:scale-98 disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold bg-[#095d7e] hover:bg-[#074862] text-white shadow-[0_2px_8px_rgba(9,93,126,0.25)] transition active:scale-98 disabled:opacity-50"
             >
               <Send className="w-3.5 h-3.5" />
               <span>{isSubmitting ? 'Dispatching SMS...' : 'Send Review Invite'}</span>
@@ -343,18 +343,18 @@ export default function ReviewsPage() {
         {/* Recent Invites List (7 Cols) */}
         <section className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between pb-1">
-            <h2 className="text-xs font-semibold text-[#71717a] uppercase tracking-wider">
+            <h2 className="text-xs font-semibold text-[#64748b] uppercase tracking-wider">
               Recent Dispatches ({filteredReviews.length})
             </h2>
 
             <div className="relative w-56">
-              <Search className="w-3.5 h-3.5 text-[#71717a] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 text-[#64748b] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Filter patients..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1 bg-white border border-black/[0.06] focus:border-orange-500 rounded-full text-xs text-[#18181b] placeholder-[#a1a1aa] outline-none transition"
+                className="w-full pl-8 pr-3 py-1 bg-white border border-[#e7ebef] focus:border-[#095d7e] focus:ring-2 focus:ring-[#095d7e]/15 rounded-full text-xs text-[#1e293b] placeholder-[#94a3b8] outline-none shadow-soft transition"
               />
             </div>
           </div>
@@ -366,21 +366,21 @@ export default function ReviewsPage() {
               return (
                 <div
                   key={invite.id}
-                  className="p-5 bg-white rounded-2xl border border-black/[0.06] shadow-[0_2px_12px_rgba(0,0,0,0.02)] hover:border-black/[0.12] transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="p-5 bg-white rounded-2xl border border-[#e7ebef] shadow-soft hover:border-[#c3dfeb] hover:shadow-card-hover transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0 border border-orange-100">
+                    <div className="w-10 h-10 rounded-xl bg-[#eaf4f8] text-[#095d7e] flex items-center justify-center shrink-0 border border-[#c3dfeb]">
                       <UserCheck className="w-4.5 h-4.5" />
                     </div>
 
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-[#18181b]">
+                        <span className="font-semibold text-sm text-[#1e293b]">
                           {invite.patient_name || invite.patient_phone}
                         </span>
 
                         {invite.patient_name && (
-                          <span className="text-xs font-mono text-[#71717a]">
+                          <span className="text-xs font-mono text-[#64748b]">
                             {invite.patient_phone}
                           </span>
                         )}
@@ -388,29 +388,29 @@ export default function ReviewsPage() {
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                             invite.status === 'completed'
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
+                              ? 'bg-[#eaf4f8] text-[#095d7e] border border-[#c3dfeb]'
                               : invite.status === 'delivered'
                               ? 'bg-blue-50 text-blue-800 border border-blue-200/60'
-                              : 'bg-[#f4f4f5] text-[#71717a]'
+                              : 'bg-[#f1f5f9] text-[#64748b]'
                           }`}
                         >
                           {invite.status === 'completed' ? 'Review Received' : invite.status}
                         </span>
 
                         {invite.rating && (
-                          <span className="text-xs font-medium text-orange-600 flex items-center gap-0.5">
+                          <span className="text-xs font-semibold text-[#095d7e] flex items-center gap-0.5">
                             ★ {invite.rating}.0
                           </span>
                         )}
                       </div>
 
                       {invite.feedback && (
-                        <p className="text-xs text-[#71717a] mt-1 italic">
+                        <p className="text-xs text-[#64748b] mt-1 italic">
                           "{invite.feedback}"
                         </p>
                       )}
 
-                      <div className="flex items-center gap-1.5 text-xs text-[#a1a1aa] mt-1">
+                      <div className="flex items-center gap-1.5 text-xs text-[#94a3b8] mt-1">
                         <Clock className="w-3 h-3" />
                         <span>{relative} ({timeFormatted})</span>
                       </div>
@@ -418,9 +418,9 @@ export default function ReviewsPage() {
                   </div>
 
                   <div className="self-end sm:self-center">
-                    <span className="text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/50 flex items-center gap-1">
-                      <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
-                      SMS Sent
+                    <span className="text-[11px] font-semibold text-[#095d7e] bg-[#eaf4f8] px-2.5 py-1 rounded-full border border-[#c3dfeb] flex items-center gap-1">
+                      <Check className="w-3 h-3 text-[#095d7e] stroke-[2.5]" />
+                      SMS Dispatched
                     </span>
                   </div>
                 </div>
