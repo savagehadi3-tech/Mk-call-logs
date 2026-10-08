@@ -2,22 +2,21 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-role-key';
 
-export type CallType = 'answered' | 'missed' | 'voicemail';
-export type CallStatus = 'pending' | 'callback_needed' | 'resolved';
+export type CallStatus = 'completed' | 'missed' | 'voicemail';
 
 export interface CallRecord {
   id: string;
   caller_number: string;
-  call_type: CallType;
-  status: CallStatus;
+  clinic_number?: string | null;
   duration?: number | null;
+  status: CallStatus;
   recording_url?: string | null;
-  summary?: string | null;
+  voicemail_url?: string | null;
+  ai_summary?: string | null;
   created_at: string;
+  // Optional / backward-compatible fields:
   patient_name?: string | null;
-  urgency?: 'low' | 'medium' | 'high' | 'emergency';
 }
 
 export interface ReviewRequest {

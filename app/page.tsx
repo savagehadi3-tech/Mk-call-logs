@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { supabase, CallRecord, CallType, CallStatus } from '@/lib/supabase';
+import { supabase, CallRecord, CallStatus } from '@/lib/supabase';
 import {
   PhoneIncoming,
   PhoneMissed,
@@ -9,94 +9,91 @@ import {
   Clock,
   Sparkles,
   PhoneCall,
-  Check,
   PlusCircle,
   RefreshCw,
   Search,
   Timer,
-  ShieldCheck,
+  Download,
+  Activity,
+  CheckCircle2,
   AlertCircle,
-  Volume2,
-  BarChart3,
-  Calendar,
-  Radio,
-  SlidersHorizontal,
-  ChevronRight,
-  User,
-  ArrowUpRight
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Volume2
 } from 'lucide-react';
 
 const MOCK_CALLS: CallRecord[] = [
   {
     id: 'call-1',
     caller_number: '+1 (555) 234-8901',
+    clinic_number: '+1 (800) 555-0199',
     patient_name: 'Eleanor Vance',
-    call_type: 'voicemail',
-    status: 'callback_needed',
     duration: 48,
-    recording_url: 'https://actions.google.com/sounds/v1/emergency/ambulance_siren.ogg',
-    summary: 'Patient reports mild post-operative swelling and low-grade fever following Tuesday knee arthroscopy. Requests prompt physician callback regarding antibiotic adjustment.',
+    status: 'voicemail',
+    recording_url: null,
+    voicemail_url: 'https://actions.google.com/sounds/v1/emergency/ambulance_siren.ogg',
+    ai_summary: 'Patient reports mild post-operative swelling and low-grade fever following Tuesday knee arthroscopy. Requests prompt physician callback regarding antibiotic adjustment.',
     created_at: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
-    urgency: 'high',
   },
   {
     id: 'call-2',
     caller_number: '+1 (555) 876-5432',
+    clinic_number: '+1 (800) 555-0199',
     patient_name: 'Marcus Brody',
-    call_type: 'missed',
-    status: 'callback_needed',
     duration: 0,
+    status: 'missed',
     recording_url: null,
-    summary: 'Missed triage call after 5 rings. Patient has an upcoming cardiology stress test scheduled for Thursday morning.',
+    voicemail_url: null,
+    ai_summary: 'Missed triage call after 5 rings. Patient has an upcoming cardiology stress test scheduled for Thursday morning.',
     created_at: new Date(Date.now() - 1000 * 60 * 55).toISOString(),
-    urgency: 'medium',
   },
   {
     id: 'call-3',
     caller_number: '+1 (555) 432-1098',
+    clinic_number: '+1 (800) 555-0199',
     patient_name: 'Sarah Jenkins',
-    call_type: 'answered',
-    status: 'resolved',
     duration: 182,
-    recording_url: null,
-    summary: 'Routine prescription refill inquiry for Lisinopril 20mg. Refill request electronically routed to CVS Pharmacy #402. Patient confirmed dosage instructions.',
+    status: 'completed',
+    recording_url: 'https://actions.google.com/sounds/v1/emergency/ambulance_siren.ogg',
+    voicemail_url: null,
+    ai_summary: 'Routine prescription refill inquiry for Lisinopril 20mg. Refill request electronically routed to CVS Pharmacy #402. Patient confirmed dosage instructions.',
     created_at: new Date(Date.now() - 1000 * 60 * 110).toISOString(),
-    urgency: 'low',
   },
   {
     id: 'call-4',
     caller_number: '+1 (555) 901-7744',
+    clinic_number: '+1 (800) 555-0199',
     patient_name: 'David Chen',
-    call_type: 'answered',
-    status: 'resolved',
     duration: 245,
-    recording_url: null,
-    summary: 'Insurance pre-authorization inquiry for shoulder MRI scan. Staff verified in-network diagnostic imaging center.',
+    status: 'completed',
+    recording_url: 'https://actions.google.com/sounds/v1/emergency/ambulance_siren.ogg',
+    voicemail_url: null,
+    ai_summary: 'Insurance pre-authorization inquiry for shoulder MRI scan. Staff verified in-network diagnostic imaging center.',
     created_at: new Date(Date.now() - 1000 * 60 * 190).toISOString(),
-    urgency: 'low',
   },
   {
     id: 'call-5',
     caller_number: '+1 (555) 312-6688',
+    clinic_number: '+1 (800) 555-0199',
     patient_name: 'Clara Oswald',
-    call_type: 'answered',
-    status: 'resolved',
-    duration: 135,
+    duration: 0,
+    status: 'missed',
     recording_url: null,
-    summary: 'Appointment rescheduled to next Tuesday at 2:15 PM with Dr. Miller. Confirmation SMS sent to mobile.',
+    voicemail_url: null,
+    ai_summary: null,
     created_at: new Date(Date.now() - 1000 * 60 * 280).toISOString(),
-    urgency: 'low',
   },
 ];
 
 export default function DoctorFeed() {
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'voicemail' | 'resolved'>('all');
+  const [filter, setFilter] = useState<'all' | 'completed' | 'missed' | 'voicemail'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [showSimulateModal, setShowSimulateModal] = useState<boolean>(false);
+  const [expandedSummaryIds, setExpandedSummaryIds] = useState<Set<string>>(new Set());
 
   const isSupabaseConfigured = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -146,7 +143,7 @@ export default function DoctorFeed() {
     if (!isSupabaseConfigured) return;
 
     const channel = supabase
-      .channel('calls-wide-apple-feed')
+      .channel('openphone-live-calls')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'calls' },
@@ -172,28 +169,19 @@ export default function DoctorFeed() {
     };
   }, [fetchCalls, isSupabaseConfigured]);
 
-  const toggleStatus = async (id: string, current: string) => {
-    const nextStatus: CallStatus =
-      current === 'pending' || current === 'callback_needed' ? 'resolved' : 'pending';
-
-    setUpdatingId(id);
-
-    setCalls((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: nextStatus } : c))
-    );
-
-    if (isSupabaseConfigured && !isDemoMode) {
-      try {
-        await supabase.from('calls').update({ status: nextStatus }).eq('id', id);
-      } catch (err) {
-        console.error('Error updating status:', err);
+  const toggleSummaryExpand = (id: string) => {
+    setExpandedSummaryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
       }
-    }
-
-    setUpdatingId(null);
+      return next;
+    });
   };
 
-  const handleSimulateCall = async (type: CallType = 'voicemail') => {
+  const handleSimulateCall = async (simType: 'completed' | 'missed' | 'voicemail') => {
     const sampleNumbers = [
       '+1 (555) 912-3401',
       '+1 (555) 843-2219',
@@ -201,40 +189,89 @@ export default function DoctorFeed() {
       '+1 (555) 604-9812',
     ];
     const samplePatients = ['Eleanor Vance', 'Arthur Pendelton', 'Sophia Lin', 'James Wilson'];
-    const sampleSummaries: Record<CallType, string[]> = {
-      voicemail: [
-        'Caller requesting urgent lab results for yesterday blood panel. Mentioned persistent fatigue.',
-        'Patient asking for Dr. Miller callback regarding preoperative clearance instructions.',
+    const sampleSummaries = {
+      completed: [
+        'Patient confirmed appointment rescheduled to Thursday at 10:30 AM with Dr. Reynolds. Routine pre-op checkup instructions acknowledged.',
+        'Routine prescription refill inquiry for Lisinopril 20mg. Request electronically routed to CVS Pharmacy. Patient confirmed dosage instructions.',
       ],
       missed: [
-        'Inbound triage line disconnected after 4 rings. Patient phone identified in system records.',
-        'Incoming line missed during morning clinic briefing. Callback recommended.',
+        'Inbound triage line missed after 4 rings. Patient phone identified in system records. Recommended callback regarding upcoming lab test.',
+        'Incoming clinic line disconnected before intake agent answered. Callback queued.',
       ],
-      answered: [
-        'Patient confirmed appointment rescheduled to Thursday at 10:30 AM with Dr. Reynolds.',
-        'Routine insurance verification completed for upcoming MRI scan authorization.',
+      voicemail: [
+        'Patient reports mild post-operative swelling and low-grade fever following Tuesday knee arthroscopy. Requests prompt physician callback.',
+        'Caller requesting urgent lab results for yesterday blood panel. Mentioned persistent fatigue and requested physician review.',
       ],
     };
 
-    const summaries = sampleSummaries[type];
+    const summaries = sampleSummaries[simType];
     const randomSummary = summaries[Math.floor(Math.random() * summaries.length)];
     const randomPhone = sampleNumbers[Math.floor(Math.random() * sampleNumbers.length)];
     const randomPatient = samplePatients[Math.floor(Math.random() * samplePatients.length)];
+    const duration = simType === 'missed' ? 0 : Math.floor(Math.random() * 140) + 35;
+    const callId = 'call-' + Math.random().toString(36).substring(2, 9);
+    const audioSample = 'https://actions.google.com/sounds/v1/emergency/ambulance_siren.ogg';
 
     const newCall: CallRecord = {
-      id: 'call-' + Math.random().toString(36).substring(2, 9),
+      id: callId,
       caller_number: randomPhone,
+      clinic_number: '+1 (800) 555-0199',
       patient_name: randomPatient,
-      call_type: type,
-      status: type === 'answered' ? 'resolved' : 'callback_needed',
-      duration: type === 'missed' ? 0 : Math.floor(Math.random() * 120) + 30,
-      recording_url:
-        type === 'voicemail'
-          ? 'https://actions.google.com/sounds/v1/emergency/ambulance_siren.ogg'
-          : null,
-      summary: randomSummary,
+      duration,
+      status: simType,
+      recording_url: simType === 'completed' ? audioSample : null,
+      voicemail_url: simType === 'voicemail' ? audioSample : null,
+      ai_summary: randomSummary,
       created_at: new Date().toISOString(),
     };
+
+    // Try posting to OpenPhone webhook route to test end-to-end webhook processing
+    try {
+      let webhookPayload: any = null;
+
+      if (simType === 'completed') {
+        webhookPayload = {
+          type: 'call.completed',
+          data: {
+            id: callId,
+            from: randomPhone,
+            to: '+1 (800) 555-0199',
+            duration,
+            recording: { url: audioSample },
+            createdAt: newCall.created_at,
+          },
+        };
+      } else if (simType === 'missed') {
+        webhookPayload = {
+          type: 'call.completed',
+          data: {
+            id: callId,
+            from: randomPhone,
+            to: '+1 (800) 555-0199',
+            duration: 0,
+            createdAt: newCall.created_at,
+          },
+        };
+      } else if (simType === 'voicemail') {
+        webhookPayload = {
+          type: 'voicemail.completed',
+          data: {
+            callId,
+            mediaUrl: audioSample,
+          },
+        };
+      }
+
+      if (webhookPayload) {
+        await fetch('/api/webhooks/openphone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookPayload),
+        });
+      }
+    } catch (e) {
+      console.warn('Webhook simulation fetch error (fallback to local state):', e);
+    }
 
     if (isSupabaseConfigured && !isDemoMode) {
       const { error } = await supabase.from('calls').insert([newCall]);
@@ -242,6 +279,7 @@ export default function DoctorFeed() {
     } else {
       setCalls((prev) => [newCall, ...prev]);
     }
+
     setShowSimulateModal(false);
   };
 
@@ -251,92 +289,85 @@ export default function DoctorFeed() {
     if (total === 0) {
       return {
         total: 0,
-        answered: 0,
+        completed: 0,
         missed: 0,
-        answerRate: 0,
-        avgDuration: '0m 00s',
-        pendingCount: 0,
-        peakHourFormatted: 'N/A',
-        hourlyDistribution: [] as { hour: number; label: string; count: number; percentage: number }[],
+        voicemails: 0,
+        completionRate: 0,
+        avgDuration: '0s',
       };
     }
 
-    const answered = calls.filter((c) => c.call_type === 'answered');
-    const missed = calls.filter((c) => c.call_type === 'missed' || c.call_type === 'voicemail').length;
-    const pendingCount = calls.filter((c) => c.status !== 'resolved').length;
-    const rate = Math.round((answered.length / total) * 100);
+    const completedCalls = calls.filter((c) => c.status === 'completed');
+    const missedCalls = calls.filter((c) => c.status === 'missed');
+    const voicemailCalls = calls.filter((c) => c.status === 'voicemail');
 
-    const totalSecs = answered.reduce((acc, c) => acc + (c.duration || 0), 0);
-    const avgSecs = answered.length ? Math.round(totalSecs / answered.length) : 0;
+    const totalSecs = completedCalls.reduce((acc, c) => acc + (c.duration || 0), 0);
+    const avgSecs = completedCalls.length ? Math.round(totalSecs / completedCalls.length) : 0;
     const mins = Math.floor(avgSecs / 60);
     const secs = avgSecs % 60;
-    const avgDuration = `${mins}m ${secs.toString().padStart(2, '0')}s`;
+    const avgDuration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
-    // Hourly Distribution for 8 AM - 5 PM
-    const hourCounts: { [key: number]: number } = {};
-    calls.forEach((c) => {
-      const h = new Date(c.created_at).getHours();
-      hourCounts[h] = (hourCounts[h] || 0) + 1;
-    });
-
-    let maxHour = -1;
-    let maxCount = 0;
-    Object.entries(hourCounts).forEach(([hStr, count]) => {
-      const h = parseInt(hStr, 10);
-      if (count > maxCount) {
-        maxCount = count;
-        maxHour = h;
-      }
-    });
-
-    const formatHour = (h: number) => {
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const formatted = h % 12 || 12;
-      return `${formatted}:00 ${ampm}`;
-    };
-
-    const peakHourFormatted =
-      maxHour !== -1 ? `${formatHour(maxHour)} - ${formatHour((maxHour + 1) % 24)}` : 'N/A';
-
-    const operatingHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-    const maxOperatingCount = Math.max(...operatingHours.map((h) => hourCounts[h] || 0), 1);
-
-    const hourlyDistribution = operatingHours.map((hour) => {
-      const count = hourCounts[hour] || 0;
-      const label = `${hour % 12 || 12}${hour >= 12 ? 'p' : 'a'}`;
-      const percentage = Math.round((count / maxOperatingCount) * 100);
-      return { hour, label, count, percentage };
-    });
+    const rate = Math.round((completedCalls.length / total) * 100);
 
     return {
       total,
-      answered: answered.length,
-      missed,
-      answerRate: rate,
+      completed: completedCalls.length,
+      missed: missedCalls.length,
+      voicemails: voicemailCalls.length,
+      completionRate: rate,
       avgDuration,
-      pendingCount,
-      peakHourFormatted,
-      hourlyDistribution,
     };
   }, [calls]);
 
   const filteredCalls = useMemo(() => {
     return calls.filter((call) => {
-      if (filter === 'pending' && call.status === 'resolved') return false;
-      if (filter === 'voicemail' && call.call_type !== 'voicemail') return false;
-      if (filter === 'resolved' && call.status !== 'resolved') return false;
+      if (filter !== 'all' && call.status !== filter) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesNumber = call.caller_number?.toLowerCase().includes(q);
-        const matchesSummary = call.summary?.toLowerCase().includes(q);
+        const matchesCaller = call.caller_number?.toLowerCase().includes(q);
+        const matchesClinic = call.clinic_number?.toLowerCase().includes(q);
+        const matchesSummary = call.ai_summary?.toLowerCase().includes(q);
         const matchesPatient = call.patient_name?.toLowerCase().includes(q);
-        return matchesNumber || matchesSummary || matchesPatient;
+        return matchesCaller || matchesClinic || matchesSummary || matchesPatient;
       }
 
       return true;
     });
   }, [calls, filter, searchQuery]);
+
+  const formatDuration = (duration?: number | null, status?: CallStatus) => {
+    if (status === 'missed') {
+      return <span className="text-amber-700 text-xs font-medium">Missed</span>;
+    }
+    if (!duration || duration <= 0) {
+      return <span className="text-[#94a3b8] text-xs">0s</span>;
+    }
+    const mins = Math.floor(duration / 60);
+    const secs = duration % 60;
+    if (mins > 0) {
+      return <span className="text-[#1e293b] text-xs font-medium">{`${mins}m ${secs.toString().padStart(2, '0')}s`}</span>;
+    }
+    return <span className="text-[#1e293b] text-xs font-medium">{`${secs}s`}</span>;
+  };
+
+  const formatDateTime = (isoString: string) => {
+    try {
+      const d = new Date(isoString);
+      const datePart = d.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      const timePart = d.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      return { datePart, timePart };
+    } catch {
+      return { datePart: '—', timePart: '' };
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] text-[#1e293b] font-sans pb-24">
@@ -346,10 +377,10 @@ export default function DoctorFeed() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#e7ebef]">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[#1e293b]">
-              Physician Call Triage & EHR Intake
+              OpenPhone Call Logs & AI Triage Hub
             </h1>
             <p className="text-xs text-[#64748b] mt-1 font-normal">
-              Real-time patient telecommunications, AI triage summaries & electronic health record sync
+              Live OpenPhone webhook integration with audio recordings, voicemails & clinical AI summaries
             </p>
           </div>
 
@@ -357,7 +388,7 @@ export default function DoctorFeed() {
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#e7ebef] shadow-soft">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="text-xs font-medium text-[#64748b]">
-                {isDemoMode ? 'Interactive Clinical Preview' : 'Postgres Realtime Connected'}
+                {isDemoMode ? 'Interactive Preview' : 'Supabase Live Connected'}
               </span>
             </div>
 
@@ -383,386 +414,360 @@ export default function DoctorFeed() {
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#64748b]">
-                Today's Inbound
-              </span>
+              <span className="text-xs font-semibold text-[#64748b]">Total Calls</span>
               <span className="w-2 h-2 rounded-full bg-[#095d7e]/40" />
             </div>
             <div className="mt-3 flex items-baseline justify-between">
               <span className="text-3xl font-semibold tracking-tight text-[#1e293b]">
                 {stats.total}
               </span>
-              <span className="text-xs text-[#64748b]">
-                {stats.missed} missed
-              </span>
+              <span className="text-xs text-[#64748b]">logged</span>
             </div>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#64748b]">
-                Answer Rate
-              </span>
+              <span className="text-xs font-semibold text-[#64748b]">Completed Rate</span>
               <span className="text-[11px] font-semibold text-[#095d7e] bg-[#eaf4f8] px-2 py-0.5 rounded-full border border-[#c3dfeb]">
-                Optimal
+                {stats.completionRate}%
               </span>
             </div>
             <div className="mt-3 flex items-baseline justify-between">
               <span className="text-3xl font-semibold tracking-tight text-[#095d7e]">
-                {stats.answerRate}%
+                {stats.completed}
               </span>
-              <span className="text-xs text-[#64748b]">
-                {stats.answered} of {stats.total}
-              </span>
+              <span className="text-xs text-[#64748b]">answered</span>
             </div>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#64748b]">
-                Avg Handle Time
-              </span>
+              <span className="text-xs font-semibold text-[#64748b]">Avg Handle Time</span>
               <Clock className="w-3.5 h-3.5 text-[#64748b]" />
             </div>
             <div className="mt-3 flex items-baseline justify-between">
               <span className="text-2xl font-semibold tracking-tight text-[#1e293b]">
                 {stats.avgDuration}
               </span>
-              <span className="text-xs text-[#64748b]">
-                per answered call
-              </span>
+              <span className="text-xs text-[#64748b]">per call</span>
             </div>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#64748b]">
-                Pending Callbacks
-              </span>
+              <span className="text-xs font-semibold text-[#64748b]">Voicemails & Missed</span>
               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                stats.pendingCount > 0 
-                  ? 'text-amber-700 bg-amber-50 border-amber-200/60' 
+                stats.voicemails + stats.missed > 0 
+                  ? 'text-rose-700 bg-rose-50 border-rose-200/60' 
                   : 'text-emerald-700 bg-emerald-50 border-emerald-200/60'
               }`}>
-                {stats.pendingCount > 0 ? 'Action Req.' : 'All Clear'}
+                {stats.voicemails} VM / {stats.missed} Missed
               </span>
             </div>
             <div className="mt-3 flex items-baseline justify-between">
               <span className="text-3xl font-semibold tracking-tight text-[#1e293b]">
-                {stats.pendingCount}
+                {stats.voicemails + stats.missed}
               </span>
-              <span className="text-xs text-[#64748b]">
-                requiring follow-up
-              </span>
+              <span className="text-xs text-[#64748b]">unanswered</span>
             </div>
           </div>
         </section>
 
-        {/* Desktop 2-Column Split: Stream (8 Cols) vs Live Operations (4 Cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Main Feed Column (8 Cols) */}
-          <section className="lg:col-span-8 space-y-4">
-            {/* Filter Pills & Search */}
-            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between pb-1">
-              <div className="flex items-center bg-[#eef2f5] p-1 rounded-full text-xs font-medium border border-[#e2e8f0]">
-                <button
-                  onClick={() => setFilter('all')}
-                  className={`px-3.5 py-1.5 rounded-full transition-all duration-200 ${
-                    filter === 'all'
-                      ? 'bg-white text-[#095d7e] shadow-soft font-semibold'
-                      : 'text-[#64748b] hover:text-[#1e293b]'
-                  }`}
-                >
-                  All Calls ({calls.length})
-                </button>
-                <button
-                  onClick={() => setFilter('pending')}
-                  className={`px-3.5 py-1.5 rounded-full transition-all duration-200 ${
-                    filter === 'pending'
-                      ? 'bg-white text-[#095d7e] shadow-soft font-semibold'
-                      : 'text-[#64748b] hover:text-[#1e293b]'
-                  }`}
-                >
-                  Pending Callback ({stats.pendingCount})
-                </button>
-                <button
-                  onClick={() => setFilter('voicemail')}
-                  className={`px-3.5 py-1.5 rounded-full transition-all duration-200 ${
-                    filter === 'voicemail'
-                      ? 'bg-white text-rose-700 shadow-soft font-semibold'
-                      : 'text-[#64748b] hover:text-[#1e293b]'
-                  }`}
-                >
-                  Voicemails ({calls.filter((c) => c.call_type === 'voicemail').length})
-                </button>
-                <button
-                  onClick={() => setFilter('resolved')}
-                  className={`px-3.5 py-1.5 rounded-full transition-all duration-200 ${
-                    filter === 'resolved'
-                      ? 'bg-white text-emerald-700 shadow-soft font-semibold'
-                      : 'text-[#64748b] hover:text-[#1e293b]'
-                  }`}
-                >
-                  Resolved
-                </button>
-              </div>
+        {/* Filter Pills & Search Bar */}
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between pb-1">
+          <div className="flex items-center bg-[#eef2f5] p-1 rounded-full text-xs font-medium border border-[#e2e8f0] overflow-x-auto">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
+                filter === 'all'
+                  ? 'bg-white text-[#095d7e] shadow-soft font-semibold'
+                  : 'text-[#64748b] hover:text-[#1e293b]'
+              }`}
+            >
+              All Calls ({calls.length})
+            </button>
+            <button
+              onClick={() => setFilter('completed')}
+              className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
+                filter === 'completed'
+                  ? 'bg-white text-[#095d7e] shadow-soft font-semibold'
+                  : 'text-[#64748b] hover:text-[#1e293b]'
+              }`}
+            >
+              Completed ({stats.completed})
+            </button>
+            <button
+              onClick={() => setFilter('missed')}
+              className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
+                filter === 'missed'
+                  ? 'bg-white text-amber-700 shadow-soft font-semibold'
+                  : 'text-[#64748b] hover:text-[#1e293b]'
+              }`}
+            >
+              Missed ({stats.missed})
+            </button>
+            <button
+              onClick={() => setFilter('voicemail')}
+              className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
+                filter === 'voicemail'
+                  ? 'bg-white text-rose-700 shadow-soft font-semibold'
+                  : 'text-[#64748b] hover:text-[#1e293b]'
+              }`}
+            >
+              Voicemails ({stats.voicemails})
+            </button>
+          </div>
 
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-[#64748b] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Filter by phone or patient..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-[#e7ebef] focus:border-[#095d7e] focus:ring-2 focus:ring-[#095d7e]/15 rounded-full text-xs text-[#1e293b] placeholder-[#94a3b8] outline-none shadow-soft transition"
-                />
-              </div>
-            </div>
+          <div className="relative w-full sm:w-72">
+            <Search className="w-3.5 h-3.5 text-[#64748b] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Filter by phone, clinic, or summary..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-[#e7ebef] focus:border-[#095d7e] focus:ring-2 focus:ring-[#095d7e]/15 rounded-full text-xs text-[#1e293b] placeholder-[#94a3b8] outline-none shadow-soft transition"
+            />
+          </div>
+        </div>
 
-            {/* List of Calls */}
-            <div className="space-y-3.5">
-              {filteredCalls.map((call) => {
-                const isResolved = call.status === 'resolved';
+        {/* Main Call Logs Table View */}
+        <section className="bg-white rounded-2xl border border-[#e7ebef] shadow-soft overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[950px]">
+              <thead>
+                <tr className="bg-[#f8f9fa] border-b border-[#e7ebef] text-[11px] font-semibold text-[#64748b] uppercase tracking-wider">
+                  <th scope="col" className="px-5 py-3.5">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-[#095d7e]" />
+                      <span>Date & Time</span>
+                    </span>
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    <span className="flex items-center gap-1.5">
+                      <PhoneCall className="w-3.5 h-3.5 text-[#095d7e]" />
+                      <span>Caller Number</span>
+                    </span>
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    <span className="flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-[#095d7e]" />
+                      <span>Status</span>
+                    </span>
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    <span className="flex items-center gap-1.5">
+                      <Timer className="w-3.5 h-3.5 text-[#095d7e]" />
+                      <span>Duration</span>
+                    </span>
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    <span className="flex items-center gap-1.5">
+                      <Volume2 className="w-3.5 h-3.5 text-[#095d7e]" />
+                      <span>Audio Recording</span>
+                    </span>
+                  </th>
+                  <th scope="col" className="px-5 py-3.5 min-w-[320px]">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#095d7e]" />
+                      <span>AI Summary</span>
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f1f5f9]">
+                {filteredCalls.map((call) => {
+                  const audioUrl = call.recording_url || call.voicemail_url;
+                  const { datePart, timePart } = formatDateTime(call.created_at);
+                  const isExpanded = expandedSummaryIds.has(call.id);
 
-                return (
-                  <div
-                    key={call.id}
-                    className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:border-[#c3dfeb] hover:shadow-card-hover transition-all duration-200"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-3.5">
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                            call.call_type === 'voicemail'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                              : call.call_type === 'missed'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                              : 'bg-[#eaf4f8] text-[#095d7e] border border-[#c3dfeb]'
-                          }`}
-                        >
-                          {call.call_type === 'voicemail' && <Voicemail className="w-4.5 h-4.5" />}
-                          {call.call_type === 'missed' && <PhoneMissed className="w-4.5 h-4.5" />}
-                          {call.call_type === 'answered' && <PhoneIncoming className="w-4.5 h-4.5" />}
+                  return (
+                    <tr
+                      key={call.id}
+                      className="hover:bg-[#f8f9fa]/75 transition-colors group"
+                    >
+                      {/* Column 1: Date & Time */}
+                      <td className="px-5 py-4 align-top whitespace-nowrap">
+                        <div className="text-xs font-semibold text-[#1e293b]">
+                          {datePart}
                         </div>
-
-                        <div>
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="font-semibold text-sm text-[#1e293b] tracking-tight">
-                              {call.patient_name || call.caller_number}
-                            </span>
-                            {call.patient_name && (
-                              <span className="text-xs font-mono text-[#64748b]">
-                                {call.caller_number}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2 text-xs text-[#64748b] mt-0.5">
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-[#94a3b8]" />
-                              {new Date(call.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                            {call.duration ? (
-                              <span>• {Math.floor(call.duration / 60)}m {call.duration % 60}s</span>
-                            ) : null}
-                          </div>
+                        <div className="text-[11px] text-[#64748b] mt-0.5 font-mono">
+                          {timePart}
                         </div>
-                      </div>
+                      </td>
 
-                      {/* Status Badges & Quick Action */}
-                      <div className="flex items-center gap-2 self-start sm:self-auto">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold capitalize ${
-                            call.call_type === 'voicemail'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                              : call.call_type === 'missed'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                              : 'bg-[#eaf4f8] text-[#095d7e] border border-[#c3dfeb]'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              call.call_type === 'voicemail'
-                                ? 'bg-rose-500'
-                                : call.call_type === 'missed'
-                                ? 'bg-amber-500'
-                                : 'bg-[#095d7e]'
-                            }`}
-                          />
-                          {call.call_type}
-                        </span>
-
-                        {isResolved ? (
-                          <button
-                            onClick={() => toggleStatus(call.id, call.status)}
-                            disabled={updatingId === call.id}
-                            className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#334155] border border-[#cbd5e1] transition active:scale-98"
-                          >
-                            <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
-                            <span>Resolved</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => toggleStatus(call.id, call.status)}
-                            disabled={updatingId === call.id}
-                            className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-[#095d7e] hover:bg-[#074862] text-white shadow-[0_1px_4px_rgba(9,93,126,0.2)] transition active:scale-98"
-                          >
-                            <span>Mark Resolved</span>
-                          </button>
+                      {/* Column 2: Caller Number & Clinic Line */}
+                      <td className="px-5 py-4 align-top whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-semibold text-[#1e293b]">
+                            {call.caller_number}
+                          </span>
+                        </div>
+                        {call.patient_name && (
+                          <div className="text-[11px] text-[#095d7e] font-medium mt-0.5">
+                            {call.patient_name}
+                          </div>
                         )}
-                      </div>
-                    </div>
+                        {call.clinic_number && (
+                          <div className="text-[10px] text-[#94a3b8] font-mono mt-0.5">
+                            Line: {call.clinic_number}
+                          </div>
+                        )}
+                      </td>
 
-                    {/* AI Clinical Summary (Deep Blue-Teal Wash Container) */}
-                    {call.summary && (
-                      <div className="bg-[#f0f7fa] border border-[#c3dfeb] rounded-xl p-3.5 mt-2.5 text-xs text-[#1e293b]">
-                        <div className="flex items-center gap-1.5 mb-1 text-[#095d7e] font-semibold">
-                          <Sparkles className="w-3.5 h-3.5 text-[#095d7e]" />
-                          <span className="text-[11px] uppercase tracking-wider">AI Clinical Summary</span>
-                        </div>
-                        <p className="leading-relaxed font-normal text-[#1e293b]">
-                          {call.summary}
+                      {/* Column 3: Call Status Badge */}
+                      <td className="px-5 py-4 align-top whitespace-nowrap">
+                        {call.status === 'completed' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#eaf4f8] text-[#095d7e] border border-[#c3dfeb]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#095d7e]" />
+                            <PhoneIncoming className="w-3 h-3 text-[#095d7e]" />
+                            <span>completed</span>
+                          </span>
+                        )}
+
+                        {call.status === 'missed' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <PhoneMissed className="w-3 h-3 text-amber-600" />
+                            <span>missed</span>
+                          </span>
+                        )}
+
+                        {call.status === 'voicemail' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            <Voicemail className="w-3 h-3 text-rose-600" />
+                            <span>voicemail</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Column 4: Duration */}
+                      <td className="px-5 py-4 align-top whitespace-nowrap">
+                        {formatDuration(call.duration, call.status)}
+                      </td>
+
+                      {/* Column 5: Audio Player & Download Link */}
+                      <td className="px-5 py-4 align-top whitespace-nowrap">
+                        {audioUrl ? (
+                          <div className="flex items-center gap-2">
+                            <audio
+                              controls
+                              preload="none"
+                              src={audioUrl}
+                              className="h-8 max-w-[200px]"
+                            />
+                            <a
+                              href={audioUrl}
+                              download={audioUrl.split('/').pop() || 'call-audio.mp3'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 rounded-lg bg-[#eaf4f8] text-[#095d7e] hover:bg-[#095d7e] hover:text-white transition-colors"
+                              title="Download audio recording"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="text-[#94a3b8] text-xs font-mono">—</span>
+                        )}
+                      </td>
+
+                      {/* Column 6: AI Summary */}
+                      <td className="px-5 py-4 align-top">
+                        {call.ai_summary ? (
+                          <div className="bg-[#f0f7fa] border border-[#c3dfeb] rounded-xl p-3 text-xs text-[#1e293b]">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="flex items-center gap-1 text-[11px] font-semibold text-[#095d7e]">
+                                <Sparkles className="w-3 h-3 text-[#095d7e]" />
+                                <span>AI Clinical Summary</span>
+                              </span>
+                              {call.ai_summary.length > 110 && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSummaryExpand(call.id)}
+                                  className="text-[10px] text-[#095d7e] hover:underline font-medium inline-flex items-center gap-0.5"
+                                >
+                                  <span>{isExpanded ? 'Less' : 'More'}</span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-3 h-3" />
+                                  ) : (
+                                    <ChevronDown className="w-3 h-3" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                            <p
+                              className={`leading-relaxed text-[#1e293b] font-normal transition-all ${
+                                !isExpanded && call.ai_summary.length > 110
+                                  ? 'line-clamp-2'
+                                  : ''
+                              }`}
+                            >
+                              {call.ai_summary}
+                            </p>
+                          </div>
+                        ) : call.status === 'completed' || call.status === 'voicemail' ? (
+                          <div className="flex items-center gap-1.5 text-xs text-[#64748b] italic py-1">
+                            <Sparkles className="w-3 h-3 text-[#94a3b8] animate-pulse" />
+                            <span>Generating summary...</span>
+                          </div>
+                        ) : (
+                          <span className="text-[#94a3b8] text-xs">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredCalls.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-16 px-4">
+                      <div className="max-w-sm mx-auto space-y-2">
+                        <FileText className="w-8 h-8 text-[#94a3b8] mx-auto stroke-[1.5]" />
+                        <p className="text-sm font-semibold text-[#1e293b]">
+                          No calls matching this filter
+                        </p>
+                        <p className="text-xs text-[#64748b]">
+                          {searchQuery
+                            ? `Try adjusting your search query "${searchQuery}"`
+                            : 'Incoming OpenPhone events will appear here in real time.'}
                         </p>
                       </div>
-                    )}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-                    {/* Audio Player */}
-                    {call.recording_url && (
-                      <div className="mt-3 bg-[#f8f9fa] p-2.5 rounded-xl border border-[#e7ebef]">
-                        <div className="flex items-center gap-2 mb-1.5 text-[11px] font-semibold text-[#095d7e]">
-                          <Volume2 className="w-3.5 h-3.5 text-[#095d7e]" />
-                          <span>Voicemail Playback</span>
-                        </div>
-                        <audio controls className="w-full h-8 outline-none">
-                          <source src={call.recording_url} type="audio/mpeg" />
-                          <source src={call.recording_url} type="audio/ogg" />
-                          Audio playback not supported.
-                        </audio>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {filteredCalls.length === 0 && (
-                <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-[#e7ebef]">
-                  <p className="text-sm font-medium text-[#64748b]">No calls matching this filter.</p>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Right Sidebar Operations Column (4 Cols) */}
-          <aside className="lg:col-span-4 space-y-5">
-            {/* Hourly Distribution Sparkline Widget */}
-            <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft space-y-3">
-              <div className="flex items-center justify-between border-b border-[#f1f5f9] pb-2.5">
-                <div className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-[#095d7e]" />
-                  <span className="text-xs font-semibold text-[#1e293b]">
-                    Hourly Intake Traffic
-                  </span>
-                </div>
-                <span className="text-[11px] text-[#64748b]">
-                  Peak: {stats.peakHourFormatted}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-10 gap-1.5 pt-2">
-                {stats.hourlyDistribution.map((item) => (
-                  <div key={item.hour} className="flex flex-col items-center gap-1 group">
-                    <div className="w-full bg-[#f1f5f9] rounded-md h-16 flex flex-col justify-end p-0.5 relative overflow-hidden">
-                      <div
-                        className={`w-full rounded transition-all duration-300 ${
-                          item.count > 0 ? 'bg-[#095d7e] group-hover:bg-[#074862]' : 'bg-transparent'
-                        }`}
-                        style={{ height: `${Math.max(item.percentage, item.count > 0 ? 18 : 0)}%` }}
-                      />
-                      {item.count > 0 && (
-                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-[#1e293b] group-hover:text-white pointer-events-none">
-                          {item.count}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] font-medium text-[#64748b]">
-                      {item.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Clinic Operations & EMR Sync Status */}
-            <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft space-y-3">
-              <h3 className="text-xs font-semibold text-[#1e293b] uppercase tracking-wider">
-                System Telemetry
-              </h3>
-
-              <div className="space-y-2.5 text-xs text-[#64748b]">
-                <div className="flex justify-between items-center py-1 border-b border-[#f1f5f9]">
-                  <span>Telephony Provider</span>
-                  <span className="font-semibold text-[#1e293b]">OpenPhone / Quo VoIP</span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-[#f1f5f9]">
-                  <span>Webhook Endpoint</span>
-                  <code className="font-mono text-[11px] bg-[#eaf4f8] text-[#095d7e] px-1.5 py-0.5 rounded font-medium">/api/webhook</code>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-[#f1f5f9]">
-                  <span>Realtime Engine</span>
-                  <span className="text-emerald-700 font-medium">Postgres Channel Active</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span>AI Triage Processing</span>
-                  <span className="font-semibold text-[#095d7e]">Automated EHR Summaries</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Test Inbound Generator */}
-            <div className="bg-[#f0f7fa] border border-[#c3dfeb] p-5 rounded-2xl shadow-soft space-y-3">
-              <div>
-                <h4 className="text-xs font-semibold text-[#1e293b]">
-                  Test Inbound Simulator
-                </h4>
-                <p className="text-[11px] text-[#64748b] mt-0.5">
-                  Simulate live triage events to verify realtime EHR dashboard response
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2 pt-1">
-                <button
-                  onClick={() => handleSimulateCall('voicemail')}
-                  className="w-full text-left p-2.5 rounded-xl border border-rose-200/70 bg-white hover:bg-rose-50/50 text-xs font-medium text-rose-800 transition flex items-center justify-between"
-                >
-                  <span>Post-Op Voicemail (+Audio)</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-rose-400" />
-                </button>
-                <button
-                  onClick={() => handleSimulateCall('missed')}
-                  className="w-full text-left p-2.5 rounded-xl border border-amber-200/70 bg-white hover:bg-amber-50/50 text-xs font-medium text-amber-800 transition flex items-center justify-between"
-                >
-                  <span>Missed Patient Line</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
-                </button>
-                <button
-                  onClick={() => handleSimulateCall('answered')}
-                  className="w-full text-left p-2.5 rounded-xl border border-[#c3dfeb] bg-white hover:bg-[#eaf4f8]/50 text-xs font-medium text-[#095d7e] transition flex items-center justify-between"
-                >
-                  <span>Answered Routine Refill</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-[#095d7e]" />
-                </button>
-              </div>
-            </div>
-          </aside>
+        {/* Telemetry Endpoint Card */}
+        <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-xs font-semibold text-[#1e293b] uppercase tracking-wider">
+              OpenPhone Webhook Receiver Live
+            </h3>
+            <p className="text-xs text-[#64748b]">
+              Point your OpenPhone webhook notifications to:{' '}
+              <code className="font-mono text-xs bg-[#eaf4f8] text-[#095d7e] px-2 py-0.5 rounded font-semibold">
+                /api/webhooks/openphone
+              </code>
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[#095d7e] bg-[#eaf4f8] px-3 py-1 rounded-full border border-[#c3dfeb]">
+              Listening: call.completed, call.recording.completed, voicemail.completed, call.summary.completed
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Simulator Modal */}
+      {/* OpenPhone Inbound Simulator Modal */}
       {showSimulateModal && (
         <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e7ebef] rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-[0_12px_40px_rgba(9,93,126,0.12)]">
+          <div className="bg-white border border-[#e7ebef] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-[0_12px_40px_rgba(9,93,126,0.12)]">
             <div className="flex justify-between items-center border-b border-[#f1f5f9] pb-3">
-              <h3 className="text-sm font-semibold text-[#1e293b]">Simulate Inbound Call</h3>
+              <h3 className="text-sm font-semibold text-[#1e293b]">Simulate OpenPhone Webhook</h3>
               <button
                 onClick={() => setShowSimulateModal(false)}
                 className="w-7 h-7 rounded-full bg-[#f1f5f9] hover:bg-[#e2e8f0] flex items-center justify-center text-[#64748b] text-xs font-bold transition"
@@ -771,26 +776,40 @@ export default function DoctorFeed() {
               </button>
             </div>
             <p className="text-xs text-[#64748b]">
-              Trigger an incoming telephony webhook event to test live triage and audio:
+              Trigger an incoming OpenPhone webhook event to test table display, audio playback, and AI summary rendering:
             </p>
             <div className="space-y-2 pt-1">
               <button
-                onClick={() => handleSimulateCall('voicemail')}
-                className="w-full text-left p-3 rounded-xl border border-rose-200/60 bg-rose-50/50 hover:bg-rose-50 text-xs font-semibold text-rose-800 transition"
+                onClick={() => handleSimulateCall('completed')}
+                className="w-full text-left p-3.5 rounded-xl border border-[#c3dfeb] bg-[#eaf4f8]/50 hover:bg-[#eaf4f8] text-xs font-semibold text-[#095d7e] transition flex items-center justify-between"
               >
-                Urgent Post-Op Voicemail (+Audio)
+                <div>
+                  <div className="font-semibold">call.completed (with Recording)</div>
+                  <div className="text-[11px] font-normal text-[#64748b] mt-0.5">Answered call + audio playback + AI notes</div>
+                </div>
+                <PhoneIncoming className="w-4 h-4 text-[#095d7e]" />
               </button>
+
+              <button
+                onClick={() => handleSimulateCall('voicemail')}
+                className="w-full text-left p-3.5 rounded-xl border border-rose-200/60 bg-rose-50/50 hover:bg-rose-50 text-xs font-semibold text-rose-800 transition flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-semibold">voicemail.completed</div>
+                  <div className="text-[11px] font-normal text-[#64748b] mt-0.5">Patient left voicemail + audio recording</div>
+                </div>
+                <Voicemail className="w-4 h-4 text-rose-600" />
+              </button>
+
               <button
                 onClick={() => handleSimulateCall('missed')}
-                className="w-full text-left p-3 rounded-xl border border-amber-200/60 bg-amber-50/50 hover:bg-amber-50 text-xs font-semibold text-amber-800 transition"
+                className="w-full text-left p-3.5 rounded-xl border border-amber-200/60 bg-amber-50/50 hover:bg-amber-50 text-xs font-semibold text-amber-800 transition flex items-center justify-between"
               >
-                Missed Triage Line
-              </button>
-              <button
-                onClick={() => handleSimulateCall('answered')}
-                className="w-full text-left p-3 rounded-xl border border-[#c3dfeb] bg-[#eaf4f8]/50 hover:bg-[#eaf4f8] text-xs font-semibold text-[#095d7e] transition"
-              >
-                Answered Routine Call
+                <div>
+                  <div className="font-semibold">call.completed (Missed / 0s)</div>
+                  <div className="text-[11px] font-normal text-[#64748b] mt-0.5">Unanswered inbound call</div>
+                </div>
+                <PhoneMissed className="w-4 h-4 text-amber-600" />
               </button>
             </div>
           </div>
