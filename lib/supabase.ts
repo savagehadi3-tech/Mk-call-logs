@@ -17,6 +17,9 @@ export interface CallRecord {
   created_at: string;
   // Optional / backward-compatible fields:
   patient_name?: string | null;
+  caller_name?: string | null;
+  summary?: string | null;
+  call_type?: string | null;
 }
 
 export interface ReviewRequest {

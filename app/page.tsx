@@ -16,18 +16,84 @@ import {
   Download,
   Activity,
   CheckCircle2,
-  AlertCircle,
   ChevronDown,
   ChevronUp,
   FileText,
-  Volume2
+  Volume2,
+  Check,
+  SlidersHorizontal
 } from 'lucide-react';
 
+// Robust normalization helper: guarantees a valid status ('completed' | 'missed' | 'voicemail')
+// Handles uppercase/lowercase, legacy statuses ('resolved', 'answered', 'callback_needed'),
+// and dynamically derives fallback from duration and voicemail_url.
+export const normalizeStatus = (call: CallRecord): 'completed' | 'missed' | 'voicemail' => {
+  const rawStatus = (call.status || '').toLowerCase().trim();
+  const rawType = ((call as any).call_type || '').toLowerCase().trim();
+
+  // 1. Voicemail checks
+  if (
+    rawStatus === 'voicemail' ||
+    rawType === 'voicemail' ||
+    Boolean(call.voicemail_url)
+  ) {
+    return 'voicemail';
+  }
+
+  // 2. Completed / Answered / Resolved checks
+  if (
+    rawStatus === 'completed' ||
+    rawStatus === 'answered' ||
+    rawStatus === 'resolved' ||
+    rawType === 'answered'
+  ) {
+    return 'completed';
+  }
+
+  // 3. Missed / Unanswered checks
+  if (
+    rawStatus === 'missed' ||
+    rawType === 'missed' ||
+    rawStatus === 'no-answer' ||
+    rawStatus === 'unanswered'
+  ) {
+    return 'missed';
+  }
+
+  // 4. Dynamic fallbacks:
+  // If duration > 0 => completed
+  if (typeof call.duration === 'number' && call.duration > 0) {
+    return 'completed';
+  }
+
+  // If duration === 0 => missed
+  if (call.duration === 0) {
+    return 'missed';
+  }
+
+  // Default fallback
+  return 'completed';
+};
+
 const MOCK_CALLS: CallRecord[] = [
+  {
+    id: 'call-sophia-1',
+    caller_number: '+1 (416) 555-0199',
+    clinic_number: '+1 (800) 555-0199',
+    caller_name: 'Sophia Lin',
+    patient_name: 'Sophia Lin',
+    duration: 94,
+    status: 'completed',
+    recording_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    voicemail_url: null,
+    ai_summary: 'Patient Sophia called to confirm medication renewal for Dr. Smith; callback requested before 3 PM.',
+    created_at: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
+  },
   {
     id: 'call-1',
     caller_number: '+1 (555) 234-8901',
     clinic_number: '+1 (800) 555-0199',
+    caller_name: 'Eleanor Vance',
     patient_name: 'Eleanor Vance',
     duration: 48,
     status: 'voicemail',
@@ -40,6 +106,7 @@ const MOCK_CALLS: CallRecord[] = [
     id: 'call-2',
     caller_number: '+1 (555) 876-5432',
     clinic_number: '+1 (800) 555-0199',
+    caller_name: 'Marcus Brody',
     patient_name: 'Marcus Brody',
     duration: 0,
     status: 'missed',
@@ -52,6 +119,7 @@ const MOCK_CALLS: CallRecord[] = [
     id: 'call-3',
     caller_number: '+1 (555) 432-1098',
     clinic_number: '+1 (800) 555-0199',
+    caller_name: 'Sarah Jenkins',
     patient_name: 'Sarah Jenkins',
     duration: 182,
     status: 'completed',
@@ -64,6 +132,7 @@ const MOCK_CALLS: CallRecord[] = [
     id: 'call-4',
     caller_number: '+1 (555) 901-7744',
     clinic_number: '+1 (800) 555-0199',
+    caller_name: 'David Chen',
     patient_name: 'David Chen',
     duration: 245,
     status: 'completed',
@@ -71,18 +140,6 @@ const MOCK_CALLS: CallRecord[] = [
     voicemail_url: null,
     ai_summary: 'Insurance pre-authorization inquiry for shoulder MRI scan. Staff verified in-network diagnostic imaging center.',
     created_at: new Date(Date.now() - 1000 * 60 * 190).toISOString(),
-  },
-  {
-    id: 'call-5',
-    caller_number: '+1 (555) 312-6688',
-    clinic_number: '+1 (800) 555-0199',
-    patient_name: 'Clara Oswald',
-    duration: 0,
-    status: 'missed',
-    recording_url: null,
-    voicemail_url: null,
-    ai_summary: null,
-    created_at: new Date(Date.now() - 1000 * 60 * 280).toISOString(),
   },
 ];
 
@@ -94,6 +151,8 @@ export default function DoctorFeed() {
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [showSimulateModal, setShowSimulateModal] = useState<boolean>(false);
   const [expandedSummaryIds, setExpandedSummaryIds] = useState<Set<string>>(new Set());
+  const [isSimulating, setIsSimulating] = useState<boolean>(false);
+  const [simulateSuccessMessage, setSimulateSuccessMessage] = useState<string | null>(null);
 
   const isSupabaseConfigured = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -181,109 +240,181 @@ export default function DoctorFeed() {
     });
   };
 
-  const handleSimulateCall = async (simType: 'completed' | 'missed' | 'voicemail') => {
-    const sampleNumbers = [
-      '+1 (555) 912-3401',
-      '+1 (555) 843-2219',
-      '+1 (555) 329-8742',
-      '+1 (555) 604-9812',
-    ];
-    const samplePatients = ['Eleanor Vance', 'Arthur Pendelton', 'Sophia Lin', 'James Wilson'];
-    const sampleSummaries = {
-      completed: [
-        'Patient confirmed appointment rescheduled to Thursday at 10:30 AM with Dr. Reynolds. Routine pre-op checkup instructions acknowledged.',
-        'Routine prescription refill inquiry for Lisinopril 20mg. Request electronically routed to CVS Pharmacy. Patient confirmed dosage instructions.',
-      ],
-      missed: [
-        'Inbound triage line missed after 4 rings. Patient phone identified in system records. Recommended callback regarding upcoming lab test.',
-        'Incoming clinic line disconnected before intake agent answered. Callback queued.',
-      ],
-      voicemail: [
-        'Patient reports mild post-operative swelling and low-grade fever following Tuesday knee arthroscopy. Requests prompt physician callback.',
-        'Caller requesting urgent lab results for yesterday blood panel. Mentioned persistent fatigue and requested physician review.',
-      ],
+  // Realistic Simulation Handler as requested:
+  // caller_number: "+1 (416) 555-0199", caller_name: "Sophia Lin", status: "completed",
+  // duration: 94, recording_url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+  // ai_summary: "Patient Sophia called to confirm medication renewal for Dr. Smith; callback requested before 3 PM."
+  const handleSimulateRealisticCall = async () => {
+    setIsSimulating(true);
+
+    const callId = 'call-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 7);
+    const now = new Date().toISOString();
+
+    const realisticCall: CallRecord = {
+      id: callId,
+      caller_number: '+1 (416) 555-0199',
+      clinic_number: '+1 (800) 555-0199',
+      caller_name: 'Sophia Lin',
+      patient_name: 'Sophia Lin',
+      duration: 94,
+      status: 'completed',
+      recording_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+      voicemail_url: null,
+      ai_summary: 'Patient Sophia called to confirm medication renewal for Dr. Smith; callback requested before 3 PM.',
+      created_at: now,
     };
 
-    const summaries = sampleSummaries[simType];
-    const randomSummary = summaries[Math.floor(Math.random() * summaries.length)];
+    // 1. Immediately update UI state so it displays without waiting
+    setCalls((prev) => [realisticCall, ...prev.filter((c) => c.id !== callId)]);
+
+    // 2. Also dispatch to OpenPhone webhook route to exercise the complete pipeline
+    try {
+      await fetch('/api/webhooks/openphone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'call.completed',
+          data: {
+            id: callId,
+            from: '+1 (416) 555-0199',
+            to: '+1 (800) 555-0199',
+            duration: 94,
+            recording: {
+              url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+            },
+            summary: 'Patient Sophia called to confirm medication renewal for Dr. Smith; callback requested before 3 PM.',
+            caller_name: 'Sophia Lin',
+            patient_name: 'Sophia Lin',
+            createdAt: now,
+          },
+        }),
+      });
+    } catch (err) {
+      console.warn('Webhook simulation dispatch note:', err);
+    }
+
+    // 3. Insert directly into Supabase calls table (with graceful column fallback)
+    if (isSupabaseConfigured && !isDemoMode) {
+      try {
+        const payloadToInsert: Record<string, any> = {
+          id: callId,
+          caller_number: '+1 (416) 555-0199',
+          clinic_number: '+1 (800) 555-0199',
+          status: 'completed',
+          duration: 94,
+          recording_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+          ai_summary: 'Patient Sophia called to confirm medication renewal for Dr. Smith; callback requested before 3 PM.',
+          caller_name: 'Sophia Lin',
+          patient_name: 'Sophia Lin',
+          created_at: now,
+        };
+
+        let { error } = await supabase.from('calls').insert([payloadToInsert]);
+
+        // If caller_name column does not exist in schema, retry without it
+        if (error && error.message.includes('caller_name')) {
+          delete payloadToInsert.caller_name;
+          const res = await supabase.from('calls').insert([payloadToInsert]);
+          error = res.error;
+        }
+
+        // If patient_name column does not exist in schema, retry without it
+        if (error && error.message.includes('patient_name')) {
+          delete payloadToInsert.patient_name;
+          const res = await supabase.from('calls').insert([payloadToInsert]);
+          error = res.error;
+        }
+
+        // If ai_summary column does not exist, retry with summary column
+        if (error && error.message.includes('ai_summary')) {
+          payloadToInsert.summary = payloadToInsert.ai_summary;
+          delete payloadToInsert.ai_summary;
+          const res = await supabase.from('calls').insert([payloadToInsert]);
+          error = res.error;
+        }
+
+        if (error) {
+          console.warn('Supabase direct insert warning:', error.message);
+        } else {
+          // Trigger immediate table refresh
+          await fetchCalls();
+        }
+      } catch (err) {
+        console.error('Error inserting realistic call into Supabase:', err);
+      }
+    }
+
+    setIsSimulating(false);
+    setShowSimulateModal(false);
+    setSimulateSuccessMessage('Realistic call for Sophia Lin (+Audio & AI Summary) added!');
+    setTimeout(() => setSimulateSuccessMessage(null), 4500);
+  };
+
+  const handleSimulateCustomCall = async (simType: 'completed' | 'missed' | 'voicemail') => {
+    if (simType === 'completed') {
+      await handleSimulateRealisticCall();
+      return;
+    }
+
+    setIsSimulating(true);
+    const sampleNumbers = ['+1 (555) 843-2219', '+1 (555) 329-8742', '+1 (555) 604-9812'];
+    const samplePatients = ['Arthur Pendelton', 'Marcus Brody', 'James Wilson'];
     const randomPhone = sampleNumbers[Math.floor(Math.random() * sampleNumbers.length)];
     const randomPatient = samplePatients[Math.floor(Math.random() * samplePatients.length)];
-    const duration = simType === 'missed' ? 0 : Math.floor(Math.random() * 140) + 35;
-    const callId = 'call-' + Math.random().toString(36).substring(2, 9);
+    const callId = 'call-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 7);
     const audioSample = 'https://actions.google.com/sounds/v1/emergency/ambulance_siren.ogg';
+    const now = new Date().toISOString();
 
-    const newCall: CallRecord = {
+    const customCall: CallRecord = {
       id: callId,
       caller_number: randomPhone,
       clinic_number: '+1 (800) 555-0199',
+      caller_name: randomPatient,
       patient_name: randomPatient,
-      duration,
+      duration: simType === 'missed' ? 0 : 45,
       status: simType,
-      recording_url: simType === 'completed' ? audioSample : null,
+      recording_url: null,
       voicemail_url: simType === 'voicemail' ? audioSample : null,
-      ai_summary: randomSummary,
-      created_at: new Date().toISOString(),
+      ai_summary:
+        simType === 'voicemail'
+          ? 'Caller requesting urgent lab results for blood panel. Mentioned persistent fatigue and requested physician callback.'
+          : 'Missed triage call after 4 rings. Patient phone identified in system records. Callback recommended.',
+      created_at: now,
     };
 
-    // Try posting to OpenPhone webhook route to test end-to-end webhook processing
-    try {
-      let webhookPayload: any = null;
-
-      if (simType === 'completed') {
-        webhookPayload = {
-          type: 'call.completed',
-          data: {
-            id: callId,
-            from: randomPhone,
-            to: '+1 (800) 555-0199',
-            duration,
-            recording: { url: audioSample },
-            createdAt: newCall.created_at,
-          },
-        };
-      } else if (simType === 'missed') {
-        webhookPayload = {
-          type: 'call.completed',
-          data: {
-            id: callId,
-            from: randomPhone,
-            to: '+1 (800) 555-0199',
-            duration: 0,
-            createdAt: newCall.created_at,
-          },
-        };
-      } else if (simType === 'voicemail') {
-        webhookPayload = {
-          type: 'voicemail.completed',
-          data: {
-            callId,
-            mediaUrl: audioSample,
-          },
-        };
-      }
-
-      if (webhookPayload) {
-        await fetch('/api/webhooks/openphone', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload),
-        });
-      }
-    } catch (e) {
-      console.warn('Webhook simulation fetch error (fallback to local state):', e);
-    }
+    setCalls((prev) => [customCall, ...prev.filter((c) => c.id !== callId)]);
 
     if (isSupabaseConfigured && !isDemoMode) {
-      const { error } = await supabase.from('calls').insert([newCall]);
-      if (error) setCalls((prev) => [newCall, ...prev]);
-    } else {
-      setCalls((prev) => [newCall, ...prev]);
+      try {
+        const payload: Record<string, any> = {
+          id: callId,
+          caller_number: randomPhone,
+          clinic_number: '+1 (800) 555-0199',
+          status: simType,
+          duration: customCall.duration,
+          recording_url: null,
+          voicemail_url: customCall.voicemail_url,
+          ai_summary: customCall.ai_summary,
+          caller_name: randomPatient,
+          patient_name: randomPatient,
+          created_at: now,
+        };
+        let { error } = await supabase.from('calls').insert([payload]);
+        if (error && error.message.includes('caller_name')) {
+          delete payload.caller_name;
+          await supabase.from('calls').insert([payload]);
+        }
+        await fetchCalls();
+      } catch (e) {
+        console.warn('Simulation error:', e);
+      }
     }
 
+    setIsSimulating(false);
     setShowSimulateModal(false);
   };
 
-  // Analytics Engine
+  // Analytics Engine: accurately derived via normalizeStatus()
   const stats = useMemo(() => {
     const total = calls.length;
     if (total === 0) {
@@ -297,9 +428,9 @@ export default function DoctorFeed() {
       };
     }
 
-    const completedCalls = calls.filter((c) => c.status === 'completed');
-    const missedCalls = calls.filter((c) => c.status === 'missed');
-    const voicemailCalls = calls.filter((c) => c.status === 'voicemail');
+    const completedCalls = calls.filter((c) => normalizeStatus(c) === 'completed');
+    const missedCalls = calls.filter((c) => normalizeStatus(c) === 'missed');
+    const voicemailCalls = calls.filter((c) => normalizeStatus(c) === 'voicemail');
 
     const totalSecs = completedCalls.reduce((acc, c) => acc + (c.duration || 0), 0);
     const avgSecs = completedCalls.length ? Math.round(totalSecs / completedCalls.length) : 0;
@@ -321,14 +452,15 @@ export default function DoctorFeed() {
 
   const filteredCalls = useMemo(() => {
     return calls.filter((call) => {
-      if (filter !== 'all' && call.status !== filter) return false;
+      const derivedStatus = normalizeStatus(call);
+      if (filter !== 'all' && derivedStatus !== filter) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesCaller = call.caller_number?.toLowerCase().includes(q);
         const matchesClinic = call.clinic_number?.toLowerCase().includes(q);
-        const matchesSummary = call.ai_summary?.toLowerCase().includes(q);
-        const matchesPatient = call.patient_name?.toLowerCase().includes(q);
+        const matchesSummary = (call.ai_summary || call.summary)?.toLowerCase().includes(q);
+        const matchesPatient = (call.patient_name || call.caller_name)?.toLowerCase().includes(q);
         return matchesCaller || matchesClinic || matchesSummary || matchesPatient;
       }
 
@@ -336,19 +468,25 @@ export default function DoctorFeed() {
     });
   }, [calls, filter, searchQuery]);
 
-  const formatDuration = (duration?: number | null, status?: CallStatus) => {
-    if (status === 'missed') {
-      return <span className="text-amber-700 text-xs font-medium">Missed</span>;
+  const formatDuration = (call: CallRecord) => {
+    const derivedStatus = normalizeStatus(call);
+    if (derivedStatus === 'missed') {
+      return <span className="text-amber-700 text-xs font-semibold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/50">Missed</span>;
     }
+    const duration = call.duration;
     if (!duration || duration <= 0) {
-      return <span className="text-[#94a3b8] text-xs">0s</span>;
+      return <span className="text-[#94a3b8] text-xs font-medium">0s</span>;
     }
     const mins = Math.floor(duration / 60);
     const secs = duration % 60;
     if (mins > 0) {
-      return <span className="text-[#1e293b] text-xs font-medium">{`${mins}m ${secs.toString().padStart(2, '0')}s`}</span>;
+      return (
+        <span className="text-[#1e293b] text-xs font-medium font-mono">
+          {`${mins}m ${secs.toString().padStart(2, '0')}s`}
+        </span>
+      );
     }
-    return <span className="text-[#1e293b] text-xs font-medium">{`${secs}s`}</span>;
+    return <span className="text-[#1e293b] text-xs font-medium font-mono">{`${secs}s`}</span>;
   };
 
   const formatDateTime = (isoString: string) => {
@@ -384,7 +522,7 @@ export default function DoctorFeed() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#e7ebef] shadow-soft">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span className="text-xs font-medium text-[#64748b]">
@@ -392,14 +530,27 @@ export default function DoctorFeed() {
               </span>
             </div>
 
+            {/* Primary "Simulate Call" Button: inserts realistic Sophia Lin call */}
             <button
-              onClick={() => setShowSimulateModal(true)}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-full bg-[#095d7e] hover:bg-[#074862] text-white shadow-[0_2px_8px_rgba(9,93,126,0.25)] transition active:scale-98"
+              onClick={handleSimulateRealisticCall}
+              disabled={isSimulating}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-full bg-[#095d7e] hover:bg-[#074862] text-white shadow-[0_2px_8px_rgba(9,93,126,0.25)] transition active:scale-98 disabled:opacity-50"
+              title="Insert realistic test call for Sophia Lin into Supabase"
             >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Simulate Call</span>
+              <PlusCircle className={`w-3.5 h-3.5 ${isSimulating ? 'animate-spin' : ''}`} />
+              <span>{isSimulating ? 'Simulating...' : 'Simulate Call'}</span>
             </button>
 
+            {/* Secondary Options Button to open custom simulation modal */}
+            <button
+              onClick={() => setShowSimulateModal(true)}
+              className="p-2 rounded-full bg-white border border-[#e7ebef] text-[#64748b] hover:text-[#095d7e] shadow-soft transition active:scale-95"
+              title="More Simulation Options"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Refresh Stream Button */}
             <button
               onClick={fetchCalls}
               className="p-2 rounded-full bg-white border border-[#e7ebef] text-[#64748b] hover:text-[#095d7e] shadow-soft transition active:scale-95"
@@ -409,6 +560,19 @@ export default function DoctorFeed() {
             </button>
           </div>
         </div>
+
+        {/* Success Alert Banner when a simulated call is inserted */}
+        {simulateSuccessMessage && (
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200/80 rounded-2xl text-xs font-medium text-emerald-800 flex items-center justify-between shadow-soft animate-in fade-in duration-300">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 stroke-[2.2]" />
+              <span>{simulateSuccessMessage}</span>
+            </div>
+            <span className="text-[11px] text-emerald-700 bg-white/80 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
+              Live Updated
+            </span>
+          </div>
+        )}
 
         {/* 4 Clinical Vitals & Intake Metric Cards */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -428,7 +592,7 @@ export default function DoctorFeed() {
           <div className="bg-white p-5 rounded-2xl border border-[#e7ebef] shadow-soft hover:shadow-card-hover transition-all duration-200 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[#64748b]">Completed Rate</span>
-              <span className="text-[11px] font-semibold text-[#095d7e] bg-[#eaf4f8] px-2 py-0.5 rounded-full border border-[#c3dfeb]">
+              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
                 {stats.completionRate}%
               </span>
             </div>
@@ -490,7 +654,7 @@ export default function DoctorFeed() {
               onClick={() => setFilter('completed')}
               className={`px-3.5 py-1.5 rounded-full transition-all duration-200 whitespace-nowrap ${
                 filter === 'completed'
-                  ? 'bg-white text-[#095d7e] shadow-soft font-semibold'
+                  ? 'bg-white text-emerald-700 shadow-soft font-semibold'
                   : 'text-[#64748b] hover:text-[#1e293b]'
               }`}
             >
@@ -522,7 +686,7 @@ export default function DoctorFeed() {
             <Search className="w-3.5 h-3.5 text-[#64748b] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
-              placeholder="Filter by phone, clinic, or summary..."
+              placeholder="Filter by phone, name, or summary..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3.5 py-1.5 bg-white border border-[#e7ebef] focus:border-[#095d7e] focus:ring-2 focus:ring-[#095d7e]/15 rounded-full text-xs text-[#1e293b] placeholder-[#94a3b8] outline-none shadow-soft transition"
@@ -579,6 +743,9 @@ export default function DoctorFeed() {
                   const audioUrl = call.recording_url || call.voicemail_url;
                   const { datePart, timePart } = formatDateTime(call.created_at);
                   const isExpanded = expandedSummaryIds.has(call.id);
+                  const derivedStatus = normalizeStatus(call);
+                  const callerDisplayName = call.caller_name || call.patient_name;
+                  const summaryText = call.ai_summary || call.summary;
 
                   return (
                     <tr
@@ -595,16 +762,16 @@ export default function DoctorFeed() {
                         </div>
                       </td>
 
-                      {/* Column 2: Caller Number & Clinic Line */}
+                      {/* Column 2: Caller Number & Name */}
                       <td className="px-5 py-4 align-top whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-semibold text-[#1e293b]">
                             {call.caller_number}
                           </span>
                         </div>
-                        {call.patient_name && (
-                          <div className="text-[11px] text-[#095d7e] font-medium mt-0.5">
-                            {call.patient_name}
+                        {callerDisplayName && (
+                          <div className="text-[11px] text-[#095d7e] font-semibold mt-0.5 flex items-center gap-1">
+                            <span>{callerDisplayName}</span>
                           </div>
                         )}
                         {call.clinic_number && (
@@ -614,36 +781,36 @@ export default function DoctorFeed() {
                         )}
                       </td>
 
-                      {/* Column 3: Call Status Badge */}
+                      {/* Column 3: Call Status Badge (Guaranteed to render with fallback) */}
                       <td className="px-5 py-4 align-top whitespace-nowrap">
-                        {call.status === 'completed' && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-[#eaf4f8] text-[#095d7e] border border-[#c3dfeb]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#095d7e]" />
-                            <PhoneIncoming className="w-3 h-3 text-[#095d7e]" />
-                            <span>completed</span>
+                        {derivedStatus === 'completed' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/70 shadow-xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 stroke-[2.2]" />
+                            <span>Completed</span>
                           </span>
                         )}
 
-                        {call.status === 'missed' && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/60">
+                        {derivedStatus === 'missed' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200/70 shadow-xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            <PhoneMissed className="w-3 h-3 text-amber-600" />
-                            <span>missed</span>
+                            <PhoneMissed className="w-3 h-3 text-amber-600 stroke-[2.2]" />
+                            <span>Missed</span>
                           </span>
                         )}
 
-                        {call.status === 'voicemail' && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/60">
+                        {derivedStatus === 'voicemail' && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/70 shadow-xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            <Voicemail className="w-3 h-3 text-rose-600" />
-                            <span>voicemail</span>
+                            <Voicemail className="w-3 h-3 text-rose-600 stroke-[2.2]" />
+                            <span>Voicemail</span>
                           </span>
                         )}
                       </td>
 
                       {/* Column 4: Duration */}
                       <td className="px-5 py-4 align-top whitespace-nowrap">
-                        {formatDuration(call.duration, call.status)}
+                        {formatDuration(call)}
                       </td>
 
                       {/* Column 5: Audio Player & Download Link */}
@@ -674,14 +841,14 @@ export default function DoctorFeed() {
 
                       {/* Column 6: AI Summary */}
                       <td className="px-5 py-4 align-top">
-                        {call.ai_summary ? (
+                        {summaryText ? (
                           <div className="bg-[#f0f7fa] border border-[#c3dfeb] rounded-xl p-3 text-xs text-[#1e293b]">
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <span className="flex items-center gap-1 text-[11px] font-semibold text-[#095d7e]">
                                 <Sparkles className="w-3 h-3 text-[#095d7e]" />
                                 <span>AI Clinical Summary</span>
                               </span>
-                              {call.ai_summary.length > 110 && (
+                              {summaryText.length > 110 && (
                                 <button
                                   type="button"
                                   onClick={() => toggleSummaryExpand(call.id)}
@@ -698,15 +865,15 @@ export default function DoctorFeed() {
                             </div>
                             <p
                               className={`leading-relaxed text-[#1e293b] font-normal transition-all ${
-                                !isExpanded && call.ai_summary.length > 110
+                                !isExpanded && summaryText.length > 110
                                   ? 'line-clamp-2'
                                   : ''
                               }`}
                             >
-                              {call.ai_summary}
+                              {summaryText}
                             </p>
                           </div>
-                        ) : call.status === 'completed' || call.status === 'voicemail' ? (
+                        ) : derivedStatus === 'completed' || derivedStatus === 'voicemail' ? (
                           <div className="flex items-center gap-1.5 text-xs text-[#64748b] italic py-1">
                             <Sparkles className="w-3 h-3 text-[#94a3b8] animate-pulse" />
                             <span>Generating summary...</span>
@@ -730,7 +897,7 @@ export default function DoctorFeed() {
                         <p className="text-xs text-[#64748b]">
                           {searchQuery
                             ? `Try adjusting your search query "${searchQuery}"`
-                            : 'Incoming OpenPhone events will appear here in real time.'}
+                            : 'Click "Simulate Call" above or wait for incoming OpenPhone webhooks.'}
                         </p>
                       </div>
                     </td>
@@ -762,12 +929,12 @@ export default function DoctorFeed() {
         </div>
       </div>
 
-      {/* OpenPhone Inbound Simulator Modal */}
+      {/* Simulator Modal for Additional Telephony Scenarios */}
       {showSimulateModal && (
         <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white border border-[#e7ebef] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-[0_12px_40px_rgba(9,93,126,0.12)]">
             <div className="flex justify-between items-center border-b border-[#f1f5f9] pb-3">
-              <h3 className="text-sm font-semibold text-[#1e293b]">Simulate OpenPhone Webhook</h3>
+              <h3 className="text-sm font-semibold text-[#1e293b]">Simulate Call Scenarios</h3>
               <button
                 onClick={() => setShowSimulateModal(false)}
                 className="w-7 h-7 rounded-full bg-[#f1f5f9] hover:bg-[#e2e8f0] flex items-center justify-center text-[#64748b] text-xs font-bold transition"
@@ -776,40 +943,55 @@ export default function DoctorFeed() {
               </button>
             </div>
             <p className="text-xs text-[#64748b]">
-              Trigger an incoming OpenPhone webhook event to test table display, audio playback, and AI summary rendering:
+              Choose a scenario to test table rendering, green status badges, active audio players, and AI summaries:
             </p>
             <div className="space-y-2 pt-1">
               <button
-                onClick={() => handleSimulateCall('completed')}
-                className="w-full text-left p-3.5 rounded-xl border border-[#c3dfeb] bg-[#eaf4f8]/50 hover:bg-[#eaf4f8] text-xs font-semibold text-[#095d7e] transition flex items-center justify-between"
+                onClick={() => handleSimulateCustomCall('completed')}
+                disabled={isSimulating}
+                className="w-full text-left p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-50 text-xs font-semibold text-emerald-800 transition flex items-center justify-between"
               >
                 <div>
-                  <div className="font-semibold">call.completed (with Recording)</div>
-                  <div className="text-[11px] font-normal text-[#64748b] mt-0.5">Answered call + audio playback + AI notes</div>
+                  <div className="font-semibold text-emerald-900 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Sophia Lin (Completed + MP3 Audio + AI Summary)</span>
+                  </div>
+                  <div className="text-[11px] font-normal text-emerald-700/80 mt-0.5">
+                    +1 (416) 555-0199 • 94s duration • SoundHelix MP3 • Rx Renewal Note
+                  </div>
                 </div>
-                <PhoneIncoming className="w-4 h-4 text-[#095d7e]" />
               </button>
 
               <button
-                onClick={() => handleSimulateCall('voicemail')}
+                onClick={() => handleSimulateCustomCall('voicemail')}
+                disabled={isSimulating}
                 className="w-full text-left p-3.5 rounded-xl border border-rose-200/60 bg-rose-50/50 hover:bg-rose-50 text-xs font-semibold text-rose-800 transition flex items-center justify-between"
               >
                 <div>
-                  <div className="font-semibold">voicemail.completed</div>
-                  <div className="text-[11px] font-normal text-[#64748b] mt-0.5">Patient left voicemail + audio recording</div>
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <Voicemail className="w-3.5 h-3.5 text-rose-600" />
+                    <span>voicemail.completed</span>
+                  </div>
+                  <div className="text-[11px] font-normal text-[#64748b] mt-0.5">
+                    Patient left voicemail • Voicemail audio attachment
+                  </div>
                 </div>
-                <Voicemail className="w-4 h-4 text-rose-600" />
               </button>
 
               <button
-                onClick={() => handleSimulateCall('missed')}
+                onClick={() => handleSimulateCustomCall('missed')}
+                disabled={isSimulating}
                 className="w-full text-left p-3.5 rounded-xl border border-amber-200/60 bg-amber-50/50 hover:bg-amber-50 text-xs font-semibold text-amber-800 transition flex items-center justify-between"
               >
                 <div>
-                  <div className="font-semibold">call.completed (Missed / 0s)</div>
-                  <div className="text-[11px] font-normal text-[#64748b] mt-0.5">Unanswered inbound call</div>
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <PhoneMissed className="w-3.5 h-3.5 text-amber-600" />
+                    <span>call.completed (Missed / 0s)</span>
+                  </div>
+                  <div className="text-[11px] font-normal text-[#64748b] mt-0.5">
+                    Unanswered inbound triage call
+                  </div>
                 </div>
-                <PhoneMissed className="w-4 h-4 text-amber-600" />
               </button>
             </div>
           </div>
