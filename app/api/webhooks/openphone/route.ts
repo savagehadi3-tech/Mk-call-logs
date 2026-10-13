@@ -29,11 +29,20 @@ const getSupabaseAdmin = () => {
 
 export async function POST(request: NextRequest) {
   try {
-    const payload = await request.json();
+    let payload: any;
+    try {
+      payload = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
+
     console.log('[OpenPhone Webhook] Received payload:', JSON.stringify(payload, null, 2));
 
-    const eventType = payload.type || payload.event || '';
-    const data = payload.data?.object || payload.data || payload;
+    const eventType = payload?.type || payload?.event || '';
+    const callData = payload?.data?.object || payload?.data || payload;
 
     if (!eventType) {
       return NextResponse.json(
@@ -47,59 +56,142 @@ export async function POST(request: NextRequest) {
     switch (eventType) {
       /**
        * 1. call.completed:
-       * - Calculate status: if duration > 0 then 'completed' else 'missed'.
-       * - Upsert into calls: id, caller_number (data.from), clinic_number (data.to), duration, status, and created_at.
-       * - If recording info is attached (data.recording?.url or data.mediaUrl), also set recording_url.
+       * - Inspect incoming payload: callData?.status, callData?.duration, and callData?.answeredAt.
+       * - If the call was incoming and callData?.duration === 0 (or !callData?.answeredAt / status explicitly indicates missed), set status = 'missed'.
+       * - If it was answered and spoke with someone, set status = 'completed' (or 'answered').
+       * - Preserve all existing columns (id, caller_number, clinic_number, duration, created_at, etc.) using optional chaining.
        */
       case 'call.completed': {
-        const id = data.id || data.callId || data.call_id || crypto.randomUUID();
-        const durationRaw = data.duration;
+        const id = callData?.id || callData?.callId || callData?.call_id || crypto.randomUUID();
+
+        // 1. Duration parsing with optional chaining
+        const durationRaw = callData?.duration;
         const duration =
           typeof durationRaw === 'number'
             ? durationRaw
             : durationRaw
             ? parseInt(String(durationRaw), 10)
             : 0;
+        const validDuration = Number.isFinite(duration) ? duration : 0;
 
-        const status = duration > 0 ? 'completed' : 'missed';
+        // 2. Status inspection & mapping
+        const direction = (callData?.direction || '').toLowerCase().trim();
+        const isIncoming = direction === 'incoming' || direction === 'inbound' || !direction;
+
+        const rawStatus = (callData?.status || '').toLowerCase().trim();
+        const answeredAt = callData?.answeredAt || callData?.answered_at;
+
+        const hasVoicemail =
+          rawStatus.includes('voicemail') ||
+          Boolean(callData?.voicemail) ||
+          Boolean(callData?.voicemailUrl) ||
+          Boolean(callData?.voicemail_url);
+
+        let status: 'completed' | 'missed' | 'voicemail' = 'completed';
+
+        if (hasVoicemail) {
+          status = 'voicemail';
+        } else {
+          const isExplicitMissed =
+            rawStatus === 'missed' ||
+            rawStatus === 'no-answer' ||
+            rawStatus === 'unanswered' ||
+            rawStatus === 'abandoned' ||
+            rawStatus === 'canceled' ||
+            rawStatus === 'busy' ||
+            rawStatus === 'failed';
+
+          // If incoming and duration === 0 (or !answeredAt / status explicitly indicates missed), set status = 'missed'
+          const isMissed =
+            (isIncoming && (validDuration === 0 || !answeredAt)) ||
+            isExplicitMissed;
+
+          if (isMissed) {
+            status = 'missed';
+          } else if (validDuration > 0 || Boolean(answeredAt)) {
+            // Answered and spoke with someone
+            status = 'completed';
+          } else {
+            status = 'missed';
+          }
+        }
+
+        // 3. Caller and Clinic numbers with optional chaining
         const caller_number =
-          data.from ||
-          data.caller ||
-          data.fromNumber ||
-          data.caller_number ||
-          data.phoneNumber ||
+          callData?.from ||
+          callData?.caller ||
+          callData?.fromNumber ||
+          callData?.caller_number ||
+          callData?.phoneNumber ||
           'Unknown';
+
         const clinic_number =
-          data.to ||
-          data.clinic_number ||
-          data.toNumber ||
-          data.recipient ||
+          callData?.to ||
+          callData?.clinic_number ||
+          callData?.toNumber ||
+          callData?.recipient ||
           null;
 
+        // 4. Audio recording & Voicemail URLs
         const recording_url =
-          data.recording?.url ||
-          data.recordingUrl ||
-          data.mediaUrl ||
-          data.audioUrl ||
+          callData?.recording?.url ||
+          callData?.recordingUrl ||
+          callData?.mediaUrl ||
+          callData?.audioUrl ||
           null;
 
-        const created_at =
-          data.createdAt ||
-          data.created_at ||
-          data.timestamp ||
-          new Date().toISOString();
+        const voicemail_url =
+          callData?.voicemail?.url ||
+          callData?.voicemailUrl ||
+          callData?.voicemail_url ||
+          null;
+
+        // 5. Created at timestamp
+        const rawCreatedAt = callData?.createdAt || callData?.created_at || callData?.timestamp;
+        let created_at = new Date().toISOString();
+        if (rawCreatedAt) {
+          try {
+            created_at = new Date(rawCreatedAt).toISOString();
+          } catch {
+            created_at = new Date().toISOString();
+          }
+        }
 
         const callRecord: Record<string, any> = {
           id: String(id),
           caller_number: String(caller_number),
           clinic_number: clinic_number ? String(clinic_number) : null,
-          duration: Number.isFinite(duration) ? duration : 0,
+          duration: validDuration,
           status,
-          created_at: new Date(created_at).toISOString(),
+          created_at,
         };
 
         if (recording_url) {
           callRecord.recording_url = String(recording_url);
+        }
+
+        if (voicemail_url) {
+          callRecord.voicemail_url = String(voicemail_url);
+        }
+
+        if (callData?.caller_name || callData?.patient_name) {
+          callRecord.caller_name = String(callData?.caller_name || callData?.patient_name);
+          callRecord.patient_name = String(callData?.caller_name || callData?.patient_name);
+        }
+
+        // Extract AI summary if present in call.completed payload
+        if (callData?.summary || callData?.aiSummary || callData?.ai_summary) {
+          const rawSummary = callData?.ai_summary || callData?.aiSummary || callData?.summary;
+          if (typeof rawSummary === 'string') {
+            callRecord.ai_summary = rawSummary;
+          } else if (Array.isArray(rawSummary)) {
+            callRecord.ai_summary = rawSummary
+              .map((item: any) => (typeof item === 'string' ? item : JSON.stringify(item)))
+              .join('\n');
+          } else if (typeof rawSummary === 'object') {
+            callRecord.ai_summary =
+              rawSummary?.text || rawSummary?.notes || rawSummary?.content || JSON.stringify(rawSummary);
+          }
         }
 
         console.log('[OpenPhone Webhook] Upserting call.completed record:', callRecord);
@@ -114,11 +206,35 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        const { data: upsertedData, error } = await supabase
+        // Attempt upsert with column fallbacks in case schema doesn't have optional fields
+        let upsertPayload = { ...callRecord };
+        let { data: upsertedData, error } = await supabase
           .from('calls')
-          .upsert(callRecord, { onConflict: 'id' })
+          .upsert(upsertPayload, { onConflict: 'id' })
           .select()
           .single();
+
+        if (error && error.message.includes('caller_name')) {
+          delete upsertPayload.caller_name;
+          const retry = await supabase
+            .from('calls')
+            .upsert(upsertPayload, { onConflict: 'id' })
+            .select()
+            .single();
+          error = retry.error;
+          upsertedData = retry.data;
+        }
+
+        if (error && error.message.includes('patient_name')) {
+          delete upsertPayload.patient_name;
+          const retry = await supabase
+            .from('calls')
+            .upsert(upsertPayload, { onConflict: 'id' })
+            .select()
+            .single();
+          error = retry.error;
+          upsertedData = retry.data;
+        }
 
         if (error) {
           console.error('[OpenPhone Webhook] Error upserting call.completed:', error);
@@ -137,16 +253,16 @@ export async function POST(request: NextRequest) {
 
       /**
        * 2. call.recording.completed:
-       * - Extract callId (data.callId or data.id) and recording URL (data.mediaUrl or data.url).
+       * - Extract callId (callData?.callId or callData?.id) and recording URL (callData?.mediaUrl or callData?.url).
        * - Update calls where id = callId setting recording_url = url.
        */
       case 'call.recording.completed': {
-        const callId = data.callId || data.call_id || data.id;
+        const callId = callData?.callId || callData?.call_id || callData?.id;
         const recordingUrl =
-          data.mediaUrl ||
-          data.url ||
-          data.recording?.url ||
-          data.recordingUrl ||
+          callData?.mediaUrl ||
+          callData?.url ||
+          callData?.recording?.url ||
+          callData?.recordingUrl ||
           null;
 
         if (!callId) {
@@ -191,16 +307,16 @@ export async function POST(request: NextRequest) {
 
       /**
        * 3. voicemail.completed:
-       * - Extract callId and media URL (data.mediaUrl or data.voicemail?.url).
+       * - Extract callId and media URL (callData?.mediaUrl or callData?.voicemail?.url).
        * - Update calls where id = callId setting voicemail_url = url and status = 'voicemail'.
        */
       case 'voicemail.completed': {
-        const callId = data.callId || data.call_id || data.id;
+        const callId = callData?.callId || callData?.call_id || callData?.id;
         const voicemailUrl =
-          data.mediaUrl ||
-          data.voicemail?.url ||
-          data.voicemailUrl ||
-          data.url ||
+          callData?.mediaUrl ||
+          callData?.voicemail?.url ||
+          callData?.voicemailUrl ||
+          callData?.url ||
           null;
 
         if (!callId) {
@@ -250,31 +366,29 @@ export async function POST(request: NextRequest) {
 
       /**
        * 4. call.summary.completed:
-       * - Extract callId and data.summary (join array if it is an array of strings, or convert object/string to readable text).
+       * - Extract callId and callData?.summary (join array if it is an array of strings, or convert object/string to readable text).
        * - Update calls where id = callId setting ai_summary = summaryText.
        */
       case 'call.summary.completed': {
-        const callId = data.callId || data.call_id || data.id;
+        const callId = callData?.callId || callData?.call_id || callData?.id;
         let summaryText = '';
 
-        if (typeof data.summary === 'string') {
-          summaryText = data.summary;
-        } else if (Array.isArray(data.summary)) {
-          summaryText = data.summary
+        const rawSummary = callData?.ai_summary || callData?.aiSummary || callData?.summary || callData?.transcript;
+
+        if (typeof rawSummary === 'string') {
+          summaryText = rawSummary;
+        } else if (Array.isArray(rawSummary)) {
+          summaryText = rawSummary
             .map((item: any) => (typeof item === 'string' ? item : JSON.stringify(item)))
             .join('\n');
-        } else if (data.summary && typeof data.summary === 'object') {
+        } else if (rawSummary && typeof rawSummary === 'object') {
           summaryText =
-            data.summary.text ||
-            data.summary.notes ||
-            data.summary.content ||
-            (Array.isArray(data.summary.bullets)
-              ? data.summary.bullets.join('\n')
-              : JSON.stringify(data.summary));
-        } else if (typeof data.aiSummary === 'string') {
-          summaryText = data.aiSummary;
-        } else if (typeof data.transcript === 'string') {
-          summaryText = data.transcript;
+            rawSummary?.text ||
+            rawSummary?.notes ||
+            rawSummary?.content ||
+            (Array.isArray(rawSummary?.bullets)
+              ? rawSummary.bullets.join('\n')
+              : JSON.stringify(rawSummary));
         }
 
         if (!callId) {
@@ -296,10 +410,19 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        const { error } = await supabase
+        // Try updating ai_summary, fallback to summary if column differs
+        let { error } = await supabase
           .from('calls')
           .update({ ai_summary: summaryText || null })
           .eq('id', String(callId));
+
+        if (error && error.message.includes('ai_summary')) {
+          const retry = await supabase
+            .from('calls')
+            .update({ summary: summaryText || null })
+            .eq('id', String(callId));
+          error = retry.error;
+        }
 
         if (error) {
           console.error('[OpenPhone Webhook] Error updating ai_summary:', error);
