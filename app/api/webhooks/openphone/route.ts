@@ -75,9 +75,6 @@ export async function POST(request: NextRequest) {
         const validDuration = Number.isFinite(duration) ? duration : 0;
 
         // 2. Status inspection & mapping
-        const direction = (callData?.direction || '').toLowerCase().trim();
-        const isIncoming = direction === 'incoming' || direction === 'inbound' || !direction;
-
         const rawStatus = (callData?.status || '').toLowerCase().trim();
         const answeredAt = callData?.answeredAt || callData?.answered_at;
 
@@ -101,18 +98,11 @@ export async function POST(request: NextRequest) {
             rawStatus === 'busy' ||
             rawStatus === 'failed';
 
-          // If incoming and duration === 0 (or !answeredAt / status explicitly indicates missed), set status = 'missed'
-          const isMissed =
-            (isIncoming && (validDuration === 0 || !answeredAt)) ||
-            isExplicitMissed;
-
-          if (isMissed) {
+          // Any call with duration <= 0, missing answeredAt, or explicit missed indicator is missed
+          if (validDuration <= 0 || !answeredAt || isExplicitMissed) {
             status = 'missed';
-          } else if (validDuration > 0 || Boolean(answeredAt)) {
-            // Answered and spoke with someone
-            status = 'completed';
           } else {
-            status = 'missed';
+            status = 'completed';
           }
         }
 
@@ -252,7 +242,108 @@ export async function POST(request: NextRequest) {
       }
 
       /**
-       * 2. call.recording.completed:
+       * 2. call.missed:
+       * - Direct event from OpenPhone when an incoming call ends without being answered.
+       * - Sets status = 'missed' and duration = 0.
+       */
+      case 'call.missed': {
+        const id = callData?.id || callData?.callId || callData?.call_id || crypto.randomUUID();
+        const caller_number =
+          callData?.from ||
+          callData?.caller ||
+          callData?.fromNumber ||
+          callData?.caller_number ||
+          callData?.phoneNumber ||
+          'Unknown';
+
+        const clinic_number =
+          callData?.to ||
+          callData?.clinic_number ||
+          callData?.toNumber ||
+          callData?.recipient ||
+          null;
+
+        const rawCreatedAt = callData?.createdAt || callData?.created_at || callData?.timestamp;
+        let created_at = new Date().toISOString();
+        if (rawCreatedAt) {
+          try {
+            created_at = new Date(rawCreatedAt).toISOString();
+          } catch {
+            created_at = new Date().toISOString();
+          }
+        }
+
+        const callRecord: Record<string, any> = {
+          id: String(id),
+          caller_number: String(caller_number),
+          clinic_number: clinic_number ? String(clinic_number) : null,
+          duration: 0,
+          status: 'missed',
+          created_at,
+        };
+
+        if (callData?.caller_name || callData?.patient_name) {
+          callRecord.caller_name = String(callData?.caller_name || callData?.patient_name);
+          callRecord.patient_name = String(callData?.caller_name || callData?.patient_name);
+        }
+
+        console.log('[OpenPhone Webhook] Upserting call.missed record:', callRecord);
+
+        if (!isSupabaseConfigured) {
+          return NextResponse.json({
+            success: true,
+            event: eventType,
+            data: callRecord,
+            note: 'Supabase credentials not configured in .env.local',
+          });
+        }
+
+        let upsertPayload = { ...callRecord };
+        let { data: upsertedData, error } = await supabase
+          .from('calls')
+          .upsert(upsertPayload, { onConflict: 'id' })
+          .select()
+          .single();
+
+        if (error && error.message.includes('caller_name')) {
+          delete upsertPayload.caller_name;
+          const retry = await supabase
+            .from('calls')
+            .upsert(upsertPayload, { onConflict: 'id' })
+            .select()
+            .single();
+          error = retry.error;
+          upsertedData = retry.data;
+        }
+
+        if (error && error.message.includes('patient_name')) {
+          delete upsertPayload.patient_name;
+          const retry = await supabase
+            .from('calls')
+            .upsert(upsertPayload, { onConflict: 'id' })
+            .select()
+            .single();
+          error = retry.error;
+          upsertedData = retry.data;
+        }
+
+        if (error) {
+          console.error('[OpenPhone Webhook] Error upserting call.missed:', error);
+          return NextResponse.json(
+            { success: false, error: error.message },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          event: eventType,
+          data: upsertedData || callRecord,
+        });
+      }
+
+      /**
+       * 3. call.recording.completed:
        * - Extract callId (callData?.callId or callData?.id) and recording URL (callData?.mediaUrl or callData?.url).
        * - Update calls where id = callId setting recording_url = url.
        */
@@ -306,11 +397,12 @@ export async function POST(request: NextRequest) {
       }
 
       /**
-       * 3. voicemail.completed:
+       * 4. voicemail.completed / call.voicemail.completed:
        * - Extract callId and media URL (callData?.mediaUrl or callData?.voicemail?.url).
        * - Update calls where id = callId setting voicemail_url = url and status = 'voicemail'.
        */
-      case 'voicemail.completed': {
+      case 'voicemail.completed':
+      case 'call.voicemail.completed': {
         const callId = callData?.callId || callData?.call_id || callData?.id;
         const voicemailUrl =
           callData?.mediaUrl ||
@@ -466,8 +558,10 @@ export async function GET() {
     endpoint: '/api/webhooks/openphone',
     supported_events: [
       'call.completed',
+      'call.missed',
       'call.recording.completed',
       'voicemail.completed',
+      'call.voicemail.completed',
       'call.summary.completed',
     ],
   });

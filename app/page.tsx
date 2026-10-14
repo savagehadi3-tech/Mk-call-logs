@@ -26,10 +26,10 @@ import {
 
 // Robust normalization helper: guarantees a valid status ('completed' | 'missed' | 'voicemail')
 // Handles uppercase/lowercase, legacy statuses ('resolved', 'answered', 'callback_needed'),
-// and dynamically derives fallback from duration and voicemail_url.
-export const normalizeStatus = (call: CallRecord): 'completed' | 'missed' | 'voicemail' => {
+const normalizeStatus = (call: CallRecord): 'completed' | 'missed' | 'voicemail' => {
   const rawStatus = (call.status || '').toLowerCase().trim();
   const rawType = ((call as any).call_type || '').toLowerCase().trim();
+  const duration = typeof call.duration === 'number' ? call.duration : (call.duration ? Number(call.duration) : 0);
 
   // 1. Voicemail checks
   if (
@@ -40,35 +40,33 @@ export const normalizeStatus = (call: CallRecord): 'completed' | 'missed' | 'voi
     return 'voicemail';
   }
 
-  // 2. Completed / Answered / Resolved checks
-  if (
-    rawStatus === 'completed' ||
-    rawStatus === 'answered' ||
-    rawStatus === 'resolved' ||
-    rawType === 'answered'
-  ) {
-    return 'completed';
-  }
-
-  // 3. Missed / Unanswered checks
+  // 2. Explicit missed / unanswered checks
   if (
     rawStatus === 'missed' ||
     rawType === 'missed' ||
     rawStatus === 'no-answer' ||
-    rawStatus === 'unanswered'
+    rawStatus === 'unanswered' ||
+    rawStatus === 'abandoned' ||
+    rawStatus === 'canceled'
   ) {
     return 'missed';
   }
 
-  // 4. Dynamic fallbacks:
-  // If duration > 0 => completed
-  if (typeof call.duration === 'number' && call.duration > 0) {
-    return 'completed';
+  // 3. Duration-based check:
+  // If call lasted 0s (and has no voicemail), it was missed/unanswered
+  if (duration <= 0) {
+    return 'missed';
   }
 
-  // If duration === 0 => missed
-  if (call.duration === 0) {
-    return 'missed';
+  // 4. Completed / Answered / Resolved checks (with duration > 0)
+  if (
+    rawStatus === 'completed' ||
+    rawStatus === 'answered' ||
+    rawStatus === 'resolved' ||
+    rawType === 'answered' ||
+    duration > 0
+  ) {
+    return 'completed';
   }
 
   // Default fallback
