@@ -12,7 +12,7 @@ const isSupabaseConfigured = Boolean(
   !process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder.supabase.co')
 );
 
-// Initialize Supabase admin client strictly using service role key to bypass RLS for webhooks
+// Initialize Supabase admin client strictly using service role key with persistSession: false
 const getSupabaseAdmin = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
   const serviceKey =
@@ -144,11 +144,8 @@ function verifySignature(
 }
 
 /**
- * Resilient Non-Destructive Upsert Helper:
- * Preserves existing columns (e.g. summary, next_steps) when updating call.completed,
- * and preserves caller_number, status, duration when updating call.summary.completed.
- * Automatically handles schema variations (calls vs clinic_call_logs, id vs call_id,
- * status check constraints, optional caller_name/next_steps columns).
+ * Resilient Non-Destructive Upsert Helper (for call.completed and call.missed):
+ * Only includes explicitly defined fields so existing summary/next_steps are preserved.
  */
 async function nonDestructiveUpsert(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -159,7 +156,6 @@ async function nonDestructiveUpsert(
   let lastError: any = null;
 
   for (const tableName of tableNames) {
-    // Construct payload with only explicitly defined fields
     const payload: Record<string, any> = {
       id: String(callId),
     };
@@ -170,7 +166,6 @@ async function nonDestructiveUpsert(
       }
     }
 
-    // Try primary key onConflict: 'id'
     let currentPayload = { ...payload };
     let { data, error } = await supabase
       .from(tableName)
@@ -178,7 +173,6 @@ async function nonDestructiveUpsert(
       .select()
       .single();
 
-    // If 'id' is not the primary key, try onConflict: 'call_id'
     if (error && error.message.includes('id')) {
       currentPayload.call_id = String(callId);
       const retryCallId = await supabase
@@ -188,18 +182,6 @@ async function nonDestructiveUpsert(
         .single();
       error = retryCallId.error;
       data = retryCallId.data;
-    }
-
-    // Gracefully handle missing optional columns
-    if (error && error.message.includes('next_steps')) {
-      delete currentPayload.next_steps;
-      const retry = await supabase
-        .from(tableName)
-        .upsert(currentPayload, { onConflict: currentPayload.call_id ? 'call_id' : 'id' })
-        .select()
-        .single();
-      error = retry.error;
-      data = retry.data;
     }
 
     if (error && (error.message.includes('caller_name') || error.message.includes('patient_name'))) {
@@ -228,26 +210,93 @@ async function nonDestructiveUpsert(
       data = retry.data;
     }
 
-    // Fallback if status constraint enforces ('completed', 'missed', 'voicemail') instead of 'answered'
-    if (error && (error.message.includes('status') || error.message.includes('check constraint'))) {
-      if (currentPayload.status === 'answered') {
-        currentPayload.status = 'completed';
-        const retry = await supabase
-          .from(tableName)
-          .upsert(currentPayload, { onConflict: currentPayload.call_id ? 'call_id' : 'id' })
-          .select()
-          .single();
-        error = retry.error;
-        data = retry.data;
-      }
-    }
-
     if (!error) {
       return { success: true, table: tableName, data };
     }
 
     lastError = error;
-    // If table does not exist, try next table candidate in loop
+    if (!error.message.includes('relation') && !error.message.includes('does not exist')) {
+      break;
+    }
+  }
+
+  return { success: false, error: lastError };
+}
+
+/**
+ * Resilient Non-Destructive Update Helper (for call.summary.completed & call.recording.completed):
+ * Executes a targeted .update() that ONLY updates the specific columns provided
+ * (e.g. summary, next_steps, or recording_url) and NEVER touches or resets status,
+ * caller_number, or duration_seconds.
+ */
+async function nonDestructiveUpdate(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  callId: string,
+  fieldsToUpdate: Record<string, any>
+) {
+  const tableNames = ['calls', 'clinic_call_logs'];
+  let lastError: any = null;
+
+  for (const tableName of tableNames) {
+    let currentPayload = { ...fieldsToUpdate };
+
+    let { data, error } = await supabase
+      .from(tableName)
+      .update(currentPayload)
+      .eq('id', String(callId))
+      .select();
+
+    if (error && error.message.includes('id')) {
+      const retry = await supabase
+        .from(tableName)
+        .update(currentPayload)
+        .eq('call_id', String(callId))
+        .select();
+      error = retry.error;
+      data = retry.data;
+    }
+
+    // Gracefully handle missing next_steps column
+    if (error && error.message.includes('next_steps')) {
+      delete currentPayload.next_steps;
+      const retry = await supabase
+        .from(tableName)
+        .update(currentPayload)
+        .eq('id', String(callId))
+        .select();
+      error = retry.error;
+      data = retry.data;
+    }
+
+    // Gracefully handle ai_summary vs summary column name
+    if (error && error.message.includes('ai_summary')) {
+      delete currentPayload.ai_summary;
+      const retry = await supabase
+        .from(tableName)
+        .update(currentPayload)
+        .eq('id', String(callId))
+        .select();
+      error = retry.error;
+      data = retry.data;
+    }
+
+    if (!error) {
+      // If row did not exist yet (e.g. summary webhook arrived before call.completed), insert a stub
+      if (!data || data.length === 0) {
+        const insertPayload: Record<string, any> = {
+          id: String(callId),
+          caller_number: 'Unknown',
+          status: currentPayload.status || 'completed',
+          duration: 0,
+          created_at: new Date().toISOString(),
+          ...currentPayload,
+        };
+        await supabase.from(tableName).insert([insertPayload]);
+      }
+      return { success: true, table: tableName, data };
+    }
+
+    lastError = error;
     if (!error.message.includes('relation') && !error.message.includes('does not exist')) {
       break;
     }
@@ -258,7 +307,7 @@ async function nonDestructiveUpsert(
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Read raw text first to allow cryptographic signature verification
+    // 1. Read raw text first to enable cryptographic signature verification
     const rawBody = await req.text();
 
     // 2. Cryptographic signature verification if QUO_WEBHOOK_SECRET is configured
@@ -276,7 +325,7 @@ export async function POST(req: NextRequest) {
         );
       }
     } else {
-      console.warn('[Quo Webhook] QUO_WEBHOOK_SECRET is not configured in environment. Skipping cryptographic signature verification.');
+      console.warn('[Quo Webhook] QUO_WEBHOOK_SECRET is not configured in environment. Skipping signature verification.');
     }
 
     // 3. Parse JSON body safely
@@ -307,31 +356,38 @@ export async function POST(req: NextRequest) {
 
     switch (eventType) {
       /**
-       * EVENT 1: call.completed (Accurate Status Detection)
+       * EVENT 1: call.completed (Accurate Status Detection with answeredBy edge case)
        */
       case 'call.completed': {
         const callId = callData?.id || callData?.callId || callData?.call_id || crypto.randomUUID();
 
-        // Caller phone number extraction (handles string array, object array, and fallback)
         const caller_number = extractCallerNumber(callData);
         const clinic_number = extractClinicNumber(callData);
 
-        // Accurate Status Determination:
-        // - wasAnsweredByStaff: true if staff picked up
-        // - hasRealVoicemail: true if voicemail duration > 2s or voicemail audio URL exists
-        const wasAnsweredByStaff = Boolean(callData?.answeredAt);
+        // 1. Check for genuine voicemail
         const hasRealVoicemail = Boolean(
           callData?.voicemail &&
           (Number(callData.voicemail.duration) > 2 || callData.voicemail.url)
         );
 
-        let status: 'answered' | 'voicemail' | 'missed';
-        if (wasAnsweredByStaff) {
-          status = 'answered';
-        } else if (hasRealVoicemail) {
+        // 2. The answeredBy Edge Case:
+        // answeredAt alone can be populated by the automated voicemail greeting picking up.
+        // answeredBy (the staff member's Quo User ID) is ONLY populated when a real human answered.
+        const answeredBy = callData?.answeredBy || callData?.answered_by || callData?.userId;
+        const wasAnsweredByStaff = Boolean(callData?.answeredAt && answeredBy) && !hasRealVoicemail;
+
+        // 3. Strict Status Evaluation Order:
+        // - 1) If hasRealVoicemail is true -> 'voicemail'
+        // - 2) Else if wasAnsweredByStaff is true -> 'completed'
+        //      (Our frontend UI components in app/page.tsx and database schema specifically expect 'completed'
+        //      to render the green answered checkmark badge and satisfy calls_status_check constraint)
+        // - 3) Otherwise -> 'missed' (fixes callers hanging up during voicemail greeting)
+        let status: 'completed' | 'voicemail' | 'missed';
+        if (hasRealVoicemail) {
           status = 'voicemail';
+        } else if (wasAnsweredByStaff) {
+          status = 'completed';
         } else {
-          // Fixes callers hanging up during voicemail greeting being marked as completed
           status = 'missed';
         }
 
@@ -386,7 +442,7 @@ export async function POST(req: NextRequest) {
           fieldsToUpsert.patient_name = String(callData.caller_name || callData.patient_name);
         }
 
-        console.log(`[Quo Webhook] Upserting call.completed for ${callId}:`, fieldsToUpsert);
+        console.log(`[Quo Webhook] Upserting call.completed for ${callId} (status: ${status}, answeredBy: ${answeredBy}):`, fieldsToUpsert);
 
         if (!isSupabaseConfigured) {
           return NextResponse.json({
@@ -416,6 +472,8 @@ export async function POST(req: NextRequest) {
 
       /**
        * EVENT 2: call.summary.completed (AI Summary & Action Items)
+       * Updates ONLY summary, ai_summary, and next_steps columns.
+       * NEVER touches or resets status, caller_number, or duration_seconds.
        */
       case 'call.summary.completed': {
         const callId = callData?.callId || callData?.id;
@@ -447,7 +505,7 @@ export async function POST(req: NextRequest) {
 
         const nextSteps = callData?.nextSteps || callData?.next_steps || [];
 
-        // Non-destructive update: ONLY updates summary and next_steps columns without wiping caller_number, status, or duration
+        // Targeted Non-Destructive Update: ONLY updates summary and next_steps
         const summaryFields: Record<string, any> = {
           ai_summary: summaryText || null,
           summary: summaryText || null,
@@ -457,7 +515,7 @@ export async function POST(req: NextRequest) {
           summaryFields.next_steps = nextSteps;
         }
 
-        console.log(`[Quo Webhook] Updating call.summary.completed for ${callId}:`, summaryFields);
+        console.log(`[Quo Webhook] Non-destructively updating call.summary.completed for ${callId}:`, summaryFields);
 
         if (!isSupabaseConfigured) {
           return NextResponse.json({
@@ -470,7 +528,7 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        const result = await nonDestructiveUpsert(supabase, callId, summaryFields);
+        const result = await nonDestructiveUpdate(supabase, callId, summaryFields);
         if (!result.success) {
           console.error('[Quo Webhook] Database error updating call.summary.completed:', result.error);
           return NextResponse.json(
@@ -488,7 +546,7 @@ export async function POST(req: NextRequest) {
       }
 
       /**
-       * EVENT 3: call.recording.completed (Live Call Audio Capture)
+       * EVENT 3: call.recording.completed (Live Call Audio Capture & Late Voicemail Upgrade)
        */
       case 'call.recording.completed': {
         const callId = callData?.callId || callData?.id;
@@ -507,7 +565,46 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        console.log(`[Quo Webhook] Updating recording_url for call ${callId}:`, recordingUrl);
+        console.log(`[Quo Webhook] Processing call.recording.completed for ${callId}:`, recordingUrl);
+
+        // Check for Late Voicemail Upgrade:
+        // If Quo finishes processing voicemail audio 2-3s after call.completed marked it 'missed',
+        // upgrade status from 'missed' to 'voicemail' and set voicemail_url.
+        const answeredBy = callData?.answeredBy || callData?.answered_by;
+        const isVoicemailPayload = Boolean(
+          callData?.voicemail ||
+          callData?.isVoicemail ||
+          callData?.mediaType === 'voicemail' ||
+          callData?.type === 'voicemail'
+        );
+
+        let isCurrentlyMissed = false;
+        if (isSupabaseConfigured) {
+          const { data: existingCall } = await supabase
+            .from('calls')
+            .select('status')
+            .eq('id', String(callId))
+            .maybeSingle();
+
+          if (existingCall && existingCall.status === 'missed') {
+            isCurrentlyMissed = true;
+          }
+        }
+
+        const shouldUpgradeToVoicemail =
+          isVoicemailPayload ||
+          isCurrentlyMissed ||
+          (!answeredBy && Boolean(recordingUrl));
+
+        const recordingFields: Record<string, any> = {
+          recording_url: recordingUrl ? String(recordingUrl) : null,
+        };
+
+        if (shouldUpgradeToVoicemail) {
+          recordingFields.status = 'voicemail';
+          recordingFields.voicemail_url = recordingUrl ? String(recordingUrl) : null;
+          console.log(`[Quo Webhook] Late voicemail upgrade applied for call ${callId}: status set to 'voicemail'`);
+        }
 
         if (!isSupabaseConfigured) {
           return NextResponse.json({
@@ -515,15 +612,12 @@ export async function POST(req: NextRequest) {
             event: eventType,
             callId,
             recording_url: recordingUrl,
+            status: recordingFields.status || 'unchanged',
             note: 'Supabase credentials not configured in .env.local',
           });
         }
 
-        const recordingFields: Record<string, any> = {
-          recording_url: recordingUrl ? String(recordingUrl) : null,
-        };
-
-        const result = await nonDestructiveUpsert(supabase, callId, recordingFields);
+        const result = await nonDestructiveUpdate(supabase, callId, recordingFields);
         if (!result.success) {
           console.error('[Quo Webhook] Database error updating call.recording.completed:', result.error);
           return NextResponse.json(
@@ -536,7 +630,7 @@ export async function POST(req: NextRequest) {
           success: true,
           event: eventType,
           callId,
-          recording_url: recordingUrl,
+          data: result.data,
         });
       }
 
@@ -616,6 +710,11 @@ export async function POST(req: NextRequest) {
 
         console.log(`[Quo Webhook] Updating voicemail_url for call ${callId}:`, voicemailUrl);
 
+        const vmFields: Record<string, any> = {
+          status: 'voicemail',
+          voicemail_url: voicemailUrl ? String(voicemailUrl) : null,
+        };
+
         if (!isSupabaseConfigured) {
           return NextResponse.json({
             success: true,
@@ -627,12 +726,7 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        const vmFields: Record<string, any> = {
-          status: 'voicemail',
-          voicemail_url: voicemailUrl ? String(voicemailUrl) : null,
-        };
-
-        const result = await nonDestructiveUpsert(supabase, callId, vmFields);
+        const result = await nonDestructiveUpdate(supabase, callId, vmFields);
         if (!result.success) {
           console.error('[Quo Webhook] Database error updating voicemail.completed:', result.error);
           return NextResponse.json(
@@ -659,7 +753,6 @@ export async function POST(req: NextRequest) {
     }
   } catch (err: any) {
     console.error('[Quo Webhook] Fatal handler exception:', err);
-    // Return clean JSON 500 so Quo gets standard error response without dropping connection
     return NextResponse.json(
       {
         success: false,
