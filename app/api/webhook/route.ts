@@ -1,17 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { POST as openphonePost, GET as openphoneGet } from '../webhooks/openphone/route';
+import { NextRequest } from 'next/server';
+import { POST as quoPost, GET as quoGet } from '../webhooks/quo/route';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  return openphonePost(request);
+  return quoPost(request);
 }
 
 export async function GET() {
-  const response = await openphoneGet();
-  const data = await response.json();
-  return NextResponse.json({
-    ...data,
-    legacy_endpoint: '/api/webhook',
-  });
+  return quoGet();
 }
